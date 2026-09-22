@@ -151,3 +151,50 @@ it("does not emit incomplete configuration and can cancel an unfinished light ro
     sections: [{ name: "Room", lights: [] }],
   });
 });
+
+it("warns visibly about incomplete rows and translates the warning live", async () => {
+  const editor = await mount({
+    ...config(),
+    sections: [{ name: "Room", lights: [] }],
+  });
+  await click(editor, '[data-action="add-light"]');
+  expect(
+    editor.shadowRoot!.querySelector('[role="alert"]')!.textContent,
+  ).toContain("before saving");
+  editor.hass = { ...editor.hass!, language: "nb" };
+  await editor.updateComplete;
+  expect(
+    editor.shadowRoot!.querySelector('[role="alert"]')!.textContent,
+  ).toContain("før du lagrer");
+  await click(editor, '[data-action="remove-light"]');
+  expect(editor.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+});
+it("renders malformed configuration errors with hass assigned after setConfig", async () => {
+  const editor = new LightGroupEditor();
+  expect(() =>
+    editor.setConfig({
+      type: "custom:light-group-card",
+      sections: [],
+    } as CardConfig),
+  ).not.toThrow();
+  expect(() =>
+    editor.setConfig({
+      ...config(),
+      appearance: "invalid",
+    } as unknown as CardConfig),
+  ).not.toThrow();
+  editor.hass = { ...fixture(), language: "nb" };
+  document.body.append(editor);
+  await editor.updateComplete;
+  expect(
+    editor.shadowRoot!.querySelector('[role="alert"]')!.textContent,
+  ).toContain("Velg Standard eller Bubble");
+  expect(
+    editor.shadowRoot!.querySelector('[data-action="add-section"]'),
+  ).toBeNull();
+  editor.setConfig(config());
+  await editor.updateComplete;
+  expect(
+    editor.shadowRoot!.querySelector('[data-action="add-section"]'),
+  ).not.toBeNull();
+});

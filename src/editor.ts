@@ -1,6 +1,11 @@
 import { LitElement, css, html, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
-import { normalizeConfig, TYPE } from "./config";
+import {
+  normalizeConfig,
+  ConfigValidationError,
+  type ConfigErrorCode,
+  TYPE,
+} from "./config";
 import { t, type TextKey } from "./localize";
 import {
   colorSchemes,
@@ -106,8 +111,15 @@ export class LightGroupEditor extends LitElement {
   hass?: HomeAssistant;
   private config: CardConfig = { type: TYPE, sections: [] };
   private invalid = false;
+  private configError?: ConfigErrorCode;
   setConfig(config: CardConfig): void {
-    this.config = normalizeConfig(config);
+    this.configError = undefined;
+    try {
+      this.config = normalizeConfig(config);
+    } catch (error) {
+      if (!(error instanceof ConfigValidationError)) throw error;
+      this.configError = error.code;
+    }
     this.invalid = false;
     this.requestUpdate();
   }
@@ -266,6 +278,13 @@ export class LightGroupEditor extends LitElement {
     </fieldset>`;
   }
   protected render() {
+    if (this.configError)
+      return html`<p class="error" role="alert">
+        ${this.t(this.configError)} ${this.t("invalidConfig")}
+      </p>`;
+    const incomplete = this.config.sections.some((s) =>
+      s.lights.some((l) => !l.entity),
+    );
     return html`
       <p>${this.t("editorHelp")}</p>
       <div class="fields">
@@ -305,7 +324,7 @@ export class LightGroupEditor extends LitElement {
           </select></label
         >
       </div>
-      ${this.invalid ? html`<p class="error" role="alert">${this.t("invalidValue")}</p>` : ""}
+      ${this.invalid ? html`<p class="error" role="alert">${this.t("invalidValue")}</p>` : incomplete ? html`<p class="error" role="alert">${this.t("incomplete")}</p>` : ""}
       ${this.config.sections.map((s, i) => this.section(s, i))}
       <button
         class="add"

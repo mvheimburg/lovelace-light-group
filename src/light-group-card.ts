@@ -1,6 +1,11 @@
 import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
-import { normalizeConfig, TYPE } from "./config";
+import {
+  normalizeConfig,
+  ConfigValidationError,
+  type ConfigErrorCode,
+  TYPE,
+} from "./config";
 import { t, formatPercent, type TextKey } from "./localize";
 import {
   available,
@@ -16,6 +21,7 @@ export class LightGroupCard extends LitElement {
   static properties = { hass: { attribute: false } };
   hass?: HomeAssistant;
   private config: CardConfig = { type: TYPE, sections: [] };
+  private configError?: ConfigErrorCode;
   private selected?: LightConfig;
   private configuring = false;
   private trigger?: HTMLElement;
@@ -30,9 +36,15 @@ export class LightGroupCard extends LitElement {
     this.requestUpdate();
   });
   setConfig(input: unknown): void {
-    const next = normalizeConfig(input);
     this.close();
-    this.config = next;
+    this.configError = undefined;
+    try {
+      this.config = normalizeConfig(input);
+    } catch (error) {
+      if (!(error instanceof ConfigValidationError)) throw error;
+      this.config = { type: TYPE, sections: [] };
+      this.configError = error.code;
+    }
     this.requests.reset();
     this.requestUpdate();
   }
@@ -331,7 +343,7 @@ export class LightGroupCard extends LitElement {
           </button>
         </div>
       </header>
-      ${this.error()}
+      ${this.configError ? html`<p class="error" role="alert">${this.t(this.configError)}</p>` : this.error()}
       ${
         !this.config.sections.length
           ? html`<p class="hint">${this.t("setup")}</p>`

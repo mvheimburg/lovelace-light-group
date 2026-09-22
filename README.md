@@ -21,7 +21,7 @@ Edit the dashboard, add **Light Group Card**, and use its visual editor to:
 - Reorder rooms and lights, or give them display names and icons.
 - Choose Default or Bubble appearance and a color scheme.
 
-Save the dashboard to keep changes. Cancel leaves the saved dashboard untouched. Configuration creates no backend entities or groups and changes no automations. The card's **Configure** cog explains where these options live, including when lights are unavailable. Incomplete new light rows remain editor drafts until a light is selected; select the light or remove that row before saving.
+Save the dashboard to keep changes. Cancel leaves the saved dashboard untouched. Configuration creates no backend entities or groups and changes no automations. The card's **Configure** cog explains where these options live, including when lights are unavailable. Incomplete new light rows remain editor drafts until a light is selected. An inline warning explains that the latest edits cannot be saved until you select the light or remove that row. Invalid YAML is reported inside the card/editor in the active language, with device actions disabled until the configuration is corrected.
 
 Place floor cards beside each other with the dashboard's own layout. The light grid wraps within each card, down to a single column on narrow screens.
 

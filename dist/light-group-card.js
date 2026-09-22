@@ -52,38 +52,44 @@ const colorSchemes = [
     "lavender",
 ];
 
+class ConfigValidationError extends Error {
+    constructor(code) {
+        super(code);
+        this.code = code;
+    }
+}
 const TYPE = "custom:light-group-card";
 function object(input) {
     if (!input || typeof input !== "object" || Array.isArray(input))
-        throw new Error("Invalid configuration");
+        throw new ConfigValidationError("invalidConfig");
     return input;
 }
 function optional(input, key) {
     if (input[key] !== undefined && typeof input[key] !== "string")
-        throw new Error(`Invalid ${key}`);
+        throw new ConfigValidationError("invalidText");
 }
 function normalizeConfig(input) {
     const c = object(input);
     if (c.type !== TYPE)
-        throw new Error("Invalid card type");
+        throw new ConfigValidationError("invalidType");
     for (const key of ["title", "icon"])
         optional(c, key);
     if (c.appearance !== undefined &&
         !["default", "bubble"].includes(String(c.appearance)))
-        throw new Error("Invalid appearance");
+        throw new ConfigValidationError("invalidAppearance");
     if (c.color_scheme !== undefined &&
         !colorSchemes.includes(c.color_scheme))
-        throw new Error("Invalid color_scheme");
+        throw new ConfigValidationError("invalidScheme");
     const sections = c.sections ?? [];
     if (!Array.isArray(sections))
-        throw new Error("Invalid sections");
+        throw new ConfigValidationError("invalidSections");
     return {
         ...c,
         type: TYPE,
         sections: sections.map((value) => {
             const s = object(value);
             if (typeof s.name !== "string" || !Array.isArray(s.lights))
-                throw new Error("Invalid room");
+                throw new ConfigValidationError("invalidRoom");
             optional(s, "icon");
             return {
                 ...s,
@@ -92,7 +98,7 @@ function normalizeConfig(input) {
                     const l = object(value);
                     if (typeof l.entity !== "string" ||
                         !/^light\.[a-z0-9_]+$/.test(l.entity))
-                        throw new Error("Invalid light entity");
+                        throw new ConfigValidationError("invalidLight");
                     optional(l, "name");
                     optional(l, "icon");
                     return { ...l, entity: l.entity };
@@ -103,6 +109,15 @@ function normalizeConfig(input) {
 }
 
 const en = {
+    invalidConfig: "Check the card configuration in the dashboard code editor.",
+    invalidType: "Use type: custom:light-group-card.",
+    invalidAppearance: "Choose Default or Bubble appearance.",
+    invalidScheme: "Choose a listed color scheme.",
+    invalidSections: "Rooms must be a list.",
+    invalidRoom: "Each room needs a name and a list of lights.",
+    invalidLight: "Choose a light entity (light.*).",
+    invalidText: "Names, titles and icons must be text.",
+    incomplete: "Select or remove each empty light row before saving. Until then, your latest editor changes are not passed to the dashboard.",
     title: "Lights",
     allOff: "All off",
     configure: "Configure",
@@ -146,6 +161,15 @@ const en = {
     lavender: "Lavender",
 };
 const nb = {
+    invalidConfig: "Kontroller kortoppsettet i dashbordets kodeeditor.",
+    invalidType: "Bruk type: custom:light-group-card.",
+    invalidAppearance: "Velg Standard eller Bubble som utseende.",
+    invalidScheme: "Velg et fargevalg fra listen.",
+    invalidSections: "Rom må være en liste.",
+    invalidRoom: "Hvert rom trenger et navn og en liste med lys.",
+    invalidLight: "Velg en lysenhet (light.*).",
+    invalidText: "Navn, titler og ikoner må være tekst.",
+    incomplete: "Velg eller fjern hver tom lysrad før du lagrer. Frem til da blir de siste endringene i editoren ikke sendt til dashbordet.",
     title: "Lys",
     allOff: "Alt av",
     configure: "Konfigurer",
@@ -726,9 +750,17 @@ class LightGroupCard extends i$1 {
         });
     }
     setConfig(input) {
-        const next = normalizeConfig(input);
         this.close();
-        this.config = next;
+        this.configError = undefined;
+        try {
+            this.config = normalizeConfig(input);
+        }
+        catch (error) {
+            if (!(error instanceof ConfigValidationError))
+                throw error;
+            this.config = { type: TYPE, sections: [] };
+            this.configError = error.code;
+        }
         this.requests.reset();
         this.requestUpdate();
     }
@@ -994,7 +1026,7 @@ class LightGroupCard extends i$1 {
           </button>
         </div>
       </header>
-      ${this.error()}
+      ${this.configError ? b `<p class="error" role="alert">${this.t(this.configError)}</p>` : this.error()}
       ${!this.config.sections.length
             ? b `<p class="hint">${this.t("setup")}</p>`
             : this.config.sections.map((s) => b `<section>
@@ -1032,7 +1064,15 @@ class LightGroupEditor extends i$1 {
         this.invalid = false;
     }
     setConfig(config) {
-        this.config = normalizeConfig(config);
+        this.configError = undefined;
+        try {
+            this.config = normalizeConfig(config);
+        }
+        catch (error) {
+            if (!(error instanceof ConfigValidationError))
+                throw error;
+            this.configError = error.code;
+        }
         this.invalid = false;
         this.requestUpdate();
     }
@@ -1146,6 +1186,11 @@ class LightGroupEditor extends i$1 {
     </fieldset>`;
     }
     render() {
+        if (this.configError)
+            return b `<p class="error" role="alert">
+        ${this.t(this.configError)} ${this.t("invalidConfig")}
+      </p>`;
+        const incomplete = this.config.sections.some((s) => s.lights.some((l) => !l.entity));
         return b `
       <p>${this.t("editorHelp")}</p>
       <div class="fields">
@@ -1179,7 +1224,7 @@ class LightGroupEditor extends i$1 {
           </select></label
         >
       </div>
-      ${this.invalid ? b `<p class="error" role="alert">${this.t("invalidValue")}</p>` : ""}
+      ${this.invalid ? b `<p class="error" role="alert">${this.t("invalidValue")}</p>` : incomplete ? b `<p class="error" role="alert">${this.t("incomplete")}</p>` : ""}
       ${this.config.sections.map((s, i) => this.section(s, i))}
       <button
         class="add"

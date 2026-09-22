@@ -196,3 +196,30 @@ it.each(colorSchemes)(
     );
   },
 );
+
+it("renders invalid YAML in the active language even when config arrives before hass", async () => {
+  const card = new LightGroupCard();
+  expect(() =>
+    card.setConfig({
+      type: "custom:light-group-card",
+      sections: [{ name: "Room", lights: [{ entity: "switch.wrong" }] }],
+    }),
+  ).not.toThrow();
+  card.hass = { ...fixture(), language: "nb" };
+  document.body.append(card);
+  await card.updateComplete;
+  expect(
+    card.shadowRoot!.querySelector('[role="alert"]')!.textContent,
+  ).toContain("Velg en lysenhet");
+  expect(card.shadowRoot!.querySelector('[data-action="toggle"]')).toBeNull();
+  expect(button(card, '[data-action="configure"]').disabled).toBe(false);
+  card.hass = { ...card.hass!, language: "en" };
+  await card.updateComplete;
+  expect(
+    card.shadowRoot!.querySelector('[role="alert"]')!.textContent,
+  ).toContain("Choose a light entity");
+  card.setConfig(config());
+  await card.updateComplete;
+  expect(card.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  expect(button(card, toggle).disabled).toBe(false);
+});

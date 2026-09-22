@@ -1,5 +1,15 @@
 import type { LanguageContext } from "./types";
 const en = {
+  invalidConfig: "Check the card configuration in the dashboard code editor.",
+  invalidType: "Use type: custom:light-group-card.",
+  invalidAppearance: "Choose Default or Bubble appearance.",
+  invalidScheme: "Choose a listed color scheme.",
+  invalidSections: "Rooms must be a list.",
+  invalidRoom: "Each room needs a name and a list of lights.",
+  invalidLight: "Choose a light entity (light.*).",
+  invalidText: "Names, titles and icons must be text.",
+  incomplete:
+    "Select or remove each empty light row before saving. Until then, your latest editor changes are not passed to the dashboard.",
   title: "Lights",
   allOff: "All off",
   configure: "Configure",
@@ -46,6 +56,16 @@ const en = {
   lavender: "Lavender",
 };
 const nb: Record<keyof typeof en, string> = {
+  invalidConfig: "Kontroller kortoppsettet i dashbordets kodeeditor.",
+  invalidType: "Bruk type: custom:light-group-card.",
+  invalidAppearance: "Velg Standard eller Bubble som utseende.",
+  invalidScheme: "Velg et fargevalg fra listen.",
+  invalidSections: "Rom må være en liste.",
+  invalidRoom: "Hvert rom trenger et navn og en liste med lys.",
+  invalidLight: "Velg en lysenhet (light.*).",
+  invalidText: "Navn, titler og ikoner må være tekst.",
+  incomplete:
+    "Velg eller fjern hver tom lysrad før du lagrer. Frem til da blir de siste endringene i editoren ikke sendt til dashbordet.",
   title: "Lys",
   allOff: "Alt av",
   configure: "Konfigurer",
