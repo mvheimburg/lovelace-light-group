@@ -95,6 +95,7 @@ function room(
     }),
   };
 }
+// Generic dummy names only: published previews must not reveal a real home.
 const configs: CardConfig[] = [
   {
     type: "custom:light-group-card",
@@ -102,25 +103,25 @@ const configs: CardConfig[] = [
     icon: "mdi:home-floor-1",
     appearance: "bubble",
     sections: [
-      room("Gang, bad og bod", "home-floor-1", [
-        ["Korridor", "ceiling-light", "on"],
-        ["Bad nede", "bathtub-outline"],
-        ["Grovgarderobe", "ceiling-light", "on"],
+      room("Entré og bad", "home-floor-1", [
+        ["Entré", "ceiling-light", "on"],
+        ["Bad", "bathtub-outline"],
+        ["Bod", "ceiling-light", "on"],
         ["Vaskerom", "washing-machine"],
-        ["Vekstlys", "flower"],
-        ["Teknisk", "tools"],
+        ["Plantelys", "flower"],
+        ["Kjeller", "tools"],
       ]),
-      room("Herjerom", "controller-classic", [
-        ["Herjerom 1", "led-strip-variant"],
-        ["Herjerom 2", "led-strip-variant"],
-        ["Herjerom 3", "led-strip-variant"],
+      room("Hobbyrom", "controller-classic", [
+        ["LED-list A", "led-strip-variant"],
+        ["LED-list B", "led-strip-variant"],
+        ["LED-list C", "led-strip-variant"],
       ]),
       room("Soverom", "bed", [
-        ["Matilde"],
-        ["Matilde vindu", "star-four-points"],
-        ["Ludvig"],
-        ["Ludvig lampe", "lightbulb-outline", "unavailable"],
-        ["Lila"],
+        ["Soverom 1"],
+        ["Vindu 1", "star-four-points"],
+        ["Soverom 2"],
+        ["Leselampe", "lightbulb-outline", "unavailable"],
+        ["Soverom 3"],
       ]),
     ],
   },
@@ -131,42 +132,42 @@ const configs: CardConfig[] = [
     appearance: "bubble",
     sections: [
       room("Kjøkken", "countertop", [
-        ["Kjøkkentak"],
-        ["Kjøkkenbenk", "led-strip-variant"],
-        ["Kjøkkenøy"],
-        ["Manhattan"],
+        ["Taklampe"],
+        ["Benkelys", "led-strip-variant"],
+        ["Pendel"],
+        ["Vegglampe"],
         ["Spisebord"],
-        ["Stjerne kjøkken", "star-four-points"],
+        ["Vinduslys", "star-four-points"],
       ]),
       room("Stue og gang", "sofa", [
-        ["TV-stue"],
-        ["Trappegang"],
-        ["Vegg i gang"],
+        ["Stue"],
+        ["Trapp"],
+        ["Gang"],
       ]),
       room("Kontor og bad", "desk", [
         ["Kontor", "ceiling-light", "on"],
         ["Bad tak"],
-        ["Bad speil"],
-        ["Bad pendel"],
+        ["Speil"],
+        ["Downlights"],
       ]),
-      room("Soverom", "bed", [
-        ["Sov voksen"],
-        ["Vindu voksen", "star-four-points"],
+      room("Hovedsoverom", "bed", [
+        ["Tak"],
+        ["Vindu", "star-four-points"],
         ["Garderobe", "hanger"],
       ]),
     ],
   },
   {
     type: "custom:light-group-card",
-    title: "Ute og uthus",
+    title: "Ute",
     icon: "mdi:outdoor-lamp",
     appearance: "bubble",
     sections: [
       room("", "outdoor-lamp", [
-        ["Utelys dør", "outdoor-lamp"],
-        ["Nude"],
-        ["Tak ute", "outdoor-lamp"],
-        ["Verksted tak", "garage"],
+        ["Inngang", "outdoor-lamp"],
+        ["Terrasse"],
+        ["Fasade", "outdoor-lamp"],
+        ["Garasje", "garage"],
       ]),
     ],
   },
