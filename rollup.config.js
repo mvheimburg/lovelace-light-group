@@ -7,6 +7,7 @@ export default {
     file: "dist/light-group-card.js",
     format: "es",
     sourcemap: true,
+    inlineDynamicImports: true,
   },
   plugins: [
     resolve({ browser: true }),

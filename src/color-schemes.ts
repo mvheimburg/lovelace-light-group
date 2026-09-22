@@ -1,4 +1,4 @@
-import { css } from 'lit';
+import { css } from "lit";
 /** Local overrides only: removing the attribute restores the dashboard theme. */
 export const colorSchemeStyles = css`
   :host([data-color-scheme]) {
