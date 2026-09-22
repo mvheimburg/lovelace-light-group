@@ -12,7 +12,9 @@ export type ConfigErrorCode =
   | "invalidSections"
   | "invalidRoom"
   | "invalidLight"
-  | "invalidText";
+  | "invalidText"
+  | "invalidConfirmation"
+  | "invalidAllOffVisibility";
 export class ConfigValidationError extends Error {
   constructor(readonly code: ConfigErrorCode) {
     super(code);
@@ -42,6 +44,10 @@ export function normalizeConfig(input: unknown): CardConfig {
     !colorSchemes.includes(c.color_scheme as (typeof colorSchemes)[number])
   )
     throw new ConfigValidationError("invalidScheme");
+  if (c.confirm_all_off !== undefined && typeof c.confirm_all_off !== "boolean")
+    throw new ConfigValidationError("invalidConfirmation");
+  if (c.show_all_off !== undefined && typeof c.show_all_off !== "boolean")
+    throw new ConfigValidationError("invalidAllOffVisibility");
   const sections = c.sections ?? [];
   if (!Array.isArray(sections))
     throw new ConfigValidationError("invalidSections");

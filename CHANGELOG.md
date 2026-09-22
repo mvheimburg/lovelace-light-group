@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add brightness sliders directly to dimmable light tiles.
+- Add visual editor settings to hide All off and optionally require confirmation.
+
 ## 0.1.0 — 2026-09-22
 
 - Group household lights by room, with one responsive card per floor or zone.

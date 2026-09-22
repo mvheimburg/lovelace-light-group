@@ -176,6 +176,38 @@ export const styles = [
     .light[data-state="unavailable"] .label {
       color: var(--lg-muted);
     }
+    .light-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .light-content .label {
+      width: 100%;
+    }
+    .inline-brightness {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+    }
+    .inline-brightness input {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+      min-height: 44px;
+      margin: 0;
+      accent-color: var(--lg-accent);
+      cursor: pointer;
+    }
+    .inline-brightness input:disabled {
+      cursor: default;
+    }
+    .inline-brightness output {
+      font-size: 11px;
+      color: var(--lg-muted);
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+      max-width: 45%;
+    }
     .label {
       min-width: 0;
       flex: 1;

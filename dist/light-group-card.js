@@ -80,6 +80,10 @@ function normalizeConfig(input) {
     if (c.color_scheme !== undefined &&
         !colorSchemes.includes(c.color_scheme))
         throw new ConfigValidationError("invalidScheme");
+    if (c.confirm_all_off !== undefined && typeof c.confirm_all_off !== "boolean")
+        throw new ConfigValidationError("invalidConfirmation");
+    if (c.show_all_off !== undefined && typeof c.show_all_off !== "boolean")
+        throw new ConfigValidationError("invalidAllOffVisibility");
     const sections = c.sections ?? [];
     if (!Array.isArray(sections))
         throw new ConfigValidationError("invalidSections");
@@ -120,6 +124,12 @@ const en = {
     incomplete: "Select or remove each empty light row before saving. Until then, your latest editor changes are not passed to the dashboard.",
     title: "Lights",
     allOff: "All off",
+    showAllOff: "Show All off button",
+    invalidAllOffVisibility: "All off visibility must be true or false.",
+    confirmAllOff: "Require confirmation for All off",
+    allOffPrompt: "Turn off all lights in {title}?",
+    cancel: "Cancel",
+    invalidConfirmation: "All off confirmation must be true or false.",
     configure: "Configure",
     on: "On",
     off: "Off",
@@ -172,6 +182,12 @@ const nb = {
     incomplete: "Velg eller fjern hver tom lysrad før du lagrer. Frem til da blir de siste endringene i editoren ikke sendt til dashbordet.",
     title: "Lys",
     allOff: "Alt av",
+    showAllOff: "Vis Alt av-knapp",
+    invalidAllOffVisibility: "Visning av Alt av må være true eller false.",
+    confirmAllOff: "Krev bekreftelse for Alt av",
+    allOffPrompt: "Slå av alt lys i {title}?",
+    cancel: "Avbryt",
+    invalidConfirmation: "Bekreftelse for Alt av må være true eller false.",
     configure: "Konfigurer",
     on: "På",
     off: "Av",
@@ -611,6 +627,38 @@ const styles = [
     .light[data-state="unavailable"] .label {
       color: var(--lg-muted);
     }
+    .light-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .light-content .label {
+      width: 100%;
+    }
+    .inline-brightness {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+    }
+    .inline-brightness input {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+      min-height: 44px;
+      margin: 0;
+      accent-color: var(--lg-accent);
+      cursor: pointer;
+    }
+    .inline-brightness input:disabled {
+      cursor: default;
+    }
+    .inline-brightness output {
+      font-size: 11px;
+      color: var(--lg-muted);
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+      max-width: 45%;
+    }
     .label {
       min-width: 0;
       flex: 1;
@@ -741,7 +789,16 @@ class LightGroupCard extends i$1 {
         super(...arguments);
         this.config = { type: TYPE, sections: [] };
         this.configuring = false;
+        this.confirmingAllOff = false;
+        this.inlineDrafts = new Map();
+        this.inlinePending = new Set();
         this.requests = new Requests(() => {
+            for (const id of this.inlineDrafts.keys()) {
+                if (this.requests.pending(id))
+                    this.inlinePending.add(id);
+                else if (this.inlinePending.delete(id))
+                    this.inlineDrafts.delete(id);
+            }
             if (this.requests?.error ||
                 !this.selected ||
                 !this.requests.pending(this.selected.entity))
@@ -761,6 +818,8 @@ class LightGroupCard extends i$1 {
             this.config = { type: TYPE, sections: [] };
             this.configError = error.code;
         }
+        this.inlineDrafts.clear();
+        this.inlinePending.clear();
         this.requests.reset();
         this.requestUpdate();
     }
@@ -779,8 +838,16 @@ class LightGroupCard extends i$1 {
         return t(this.hass, key);
     }
     willUpdate(changed) {
-        if (changed.has("hass") && this.hass)
-            this.requests.reconcile(this.hass.states);
+        if (changed.has("hass")) {
+            for (const id of this.inlineDrafts.keys()) {
+                if (!this.hass || !available(this.hass, id)) {
+                    this.inlineDrafts.delete(id);
+                    this.inlinePending.delete(id);
+                }
+            }
+            if (this.hass)
+                this.requests.reconcile(this.hass.states);
+        }
         this.setAttribute("appearance", this.config.appearance ?? "default");
         if (!this.config.color_scheme ||
             this.config.color_scheme === "home-assistant")
@@ -790,11 +857,13 @@ class LightGroupCard extends i$1 {
     }
     updated() {
         const dialog = this.renderRoot.querySelector("dialog");
-        if ((this.selected || this.configuring) && dialog && !dialog.open)
+        if ((this.selected || this.configuring || this.confirmingAllOff) && dialog && !dialog.open)
             dialog.showModal();
     }
     disconnectedCallback() {
         this.close();
+        this.inlineDrafts.clear();
+        this.inlinePending.clear();
         this.requests.reset();
         super.disconnectedCallback();
     }
@@ -824,6 +893,15 @@ class LightGroupCard extends i$1 {
             entity_id: id,
         });
     }
+    requestAllOff(event) {
+        if (this.config.confirm_all_off) {
+            this.trigger = event.currentTarget;
+            this.confirmingAllOff = true;
+            this.requestUpdate();
+        }
+        else
+            this.allOff();
+    }
     allOff() {
         if (!this.hass ||
             this.config.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity))))
@@ -843,6 +921,7 @@ class LightGroupCard extends i$1 {
         this.renderRoot?.querySelector("dialog")?.close();
         this.selected = undefined;
         this.configuring = false;
+        this.confirmingAllOff = false;
         this.draft = undefined;
         if (this.trigger?.isConnected)
             this.trigger.focus();
@@ -860,8 +939,8 @@ class LightGroupCard extends i$1 {
             composed: true,
         }));
     }
-    brightness(event, commit) {
-        const id = this.selected?.entity;
+    brightness(event, commit, inlineId) {
+        const id = inlineId ?? this.selected?.entity;
         const value = Number(event.target.value);
         if (!id ||
             !this.enabled(id) ||
@@ -870,7 +949,10 @@ class LightGroupCard extends i$1 {
             value < 0 ||
             value > 100)
             return;
-        this.draft = value;
+        if (inlineId)
+            this.inlineDrafts.set(inlineId, value);
+        else
+            this.draft = value;
         this.requestUpdate();
         if (commit)
             this.send([id], { state: value === 0 ? "off" : "on", brightnessPct: value }, "turn_on", { entity_id: id, brightness_pct: value });
@@ -887,6 +969,7 @@ class LightGroupCard extends i$1 {
         const entity = this.hass?.states[id];
         const valid = !!this.hass && available(this.hass, id);
         const on = entity?.state === "on";
+        const brightness = this.inlineDrafts.get(id) ?? (entity?.state === "off" ? 0 : brightnessPercent(entity));
         const icon = light.icon ||
             (typeof entity?.attributes.icon === "string"
                 ? entity.attributes.icon
@@ -908,6 +991,7 @@ class LightGroupCard extends i$1 {
       >
         <ha-icon .icon=${icon}></ha-icon>
       </button>
+      <div class="light-content">
       <button
         class="label"
         data-action="details"
@@ -918,6 +1002,19 @@ class LightGroupCard extends i$1 {
         <span class="name">${this.name(light)}</span
         ><span class="status">${this.status(id)}</span>
       </button>
+      ${supportsBrightness(entity) ? b `
+        <div class="inline-brightness">
+          <input type="range" min="0" max="100" step="1"
+            .value=${l(String(brightness ?? 0))}
+            aria-label=${`${this.t("brightness")}: ${this.name(light)}`}
+            aria-valuetext=${brightness === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, brightness)}
+            ?disabled=${!this.enabled(id)}
+            @input=${(e) => this.brightness(e, false, id)}
+            @change=${(e) => this.brightness(e, true, id)}
+          />
+          <output>${brightness === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, brightness)}</output>
+        </div>` : A}
+      </div>
     </div>`;
     }
     dialog() {
@@ -935,7 +1032,7 @@ class LightGroupCard extends i$1 {
       <header>
         <div class="heading">
           <h2 id="dialog-title">
-            ${light ? this.name(light) : this.t("configure")}
+            ${light ? this.name(light) : this.t(this.confirmingAllOff ? "allOff" : "configure")}
           </h2>
           ${light ? b `<span class="status" aria-live="polite">${this.status(light.entity)}</span>` : A}
         </div>
@@ -949,10 +1046,19 @@ class LightGroupCard extends i$1 {
           <ha-icon .icon=${"mdi:close"}></ha-icon>
         </button>
       </header>
-      ${light
-            ? b `
+      ${this.confirmingAllOff
+            ? b `<p>${this.t("allOffPrompt").replace("{title}", this.config.title || this.t("title"))}</p>
+              <div class="controls">
+                <button class="action" data-action="cancel-all-off" autofocus
+                  @click=${() => this.close()}>${this.t("cancel")}</button>
+                <button class="action primary" data-action="confirm-all-off"
+                  ?disabled=${!this.hass || !allOffTargets(this.config, this.hass).length || this.config.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity)))}
+                  @click=${() => { this.close(); this.allOff(); }}>${this.t("allOff")}</button>
+              </div>`
+            : light
+                ? b `
               ${supportsBrightness(entity)
-                ? b `<label class="brightness"
+                    ? b `<label class="brightness"
                       ><span class="brightness-label"
                         ><span>${this.t("brightness")}</span
                         ><output
@@ -971,7 +1077,7 @@ class LightGroupCard extends i$1 {
                         @input=${(e) => this.brightness(e, false)}
                         @change=${(e) => this.brightness(e, true)}
                     /></label>`
-                : A}
+                    : A}
               ${this.error()}
               <div class="controls">
                 <button
@@ -991,7 +1097,7 @@ class LightGroupCard extends i$1 {
                 </button>
               </div>
             `
-            : b `<p class="hint">${this.t("configureHelp")}</p>`}
+                : b `<p class="hint">${this.t("configureHelp")}</p>`}
     </dialog>`;
     }
     render() {
@@ -1006,15 +1112,15 @@ class LightGroupCard extends i$1 {
           <h2>${this.config.title || this.t("title")}</h2>
         </div>
         <div class="header-actions">
-          <button
+          ${this.config.show_all_off !== false ? b `<button
             class="all-off"
             data-action="all-off"
             ?disabled=${!ids.length || pending}
-            @click=${() => this.allOff()}
+            @click=${(event) => this.requestAllOff(event)}
           >
             <ha-icon .icon=${"mdi:lightbulb-group-off-outline"}></ha-icon
             >${this.t("allOff")}
-          </button>
+          </button>` : A}
           <button
             class="round"
             data-action="configure"
@@ -1193,6 +1299,24 @@ class LightGroupEditor extends i$1 {
         const incomplete = this.config.sections.some((s) => s.lights.some((l) => !l.entity));
         return b `
       <p>${this.t("editorHelp")}</p>
+      <label>
+        ${this.t("showAllOff")}
+        <input type="checkbox" name="show_all_off"
+          .checked=${l(this.config.show_all_off ?? true)}
+          @change=${(e) => this.change((c) => {
+            c.show_all_off = e.target.checked;
+        })}
+        />
+      </label>
+      <label>
+        ${this.t("confirmAllOff")}
+        <input type="checkbox" name="confirm_all_off"
+          .checked=${l(this.config.confirm_all_off ?? false)}
+          @change=${(e) => this.change((c) => {
+            c.confirm_all_off = e.target.checked;
+        })}
+        />
+      </label>
       <div class="fields">
         ${this.text("title", "cardTitle", this.config.title, (value) => this.change((c) => {
             c.title = value;

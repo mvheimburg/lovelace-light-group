@@ -287,6 +287,24 @@ export class LightGroupEditor extends LitElement {
     );
     return html`
       <p>${this.t("editorHelp")}</p>
+      <label>
+        ${this.t("showAllOff")}
+        <input type="checkbox" name="show_all_off"
+          .checked=${live(this.config.show_all_off ?? true)}
+          @change=${(e: Event) => this.change((c) => {
+            c.show_all_off = (e.target as HTMLInputElement).checked;
+          })}
+        />
+      </label>
+      <label>
+        ${this.t("confirmAllOff")}
+        <input type="checkbox" name="confirm_all_off"
+          .checked=${live(this.config.confirm_all_off ?? false)}
+          @change=${(e: Event) => this.change((c) => {
+            c.confirm_all_off = (e.target as HTMLInputElement).checked;
+          })}
+        />
+      </label>
       <div class="fields">
         ${this.text("title", "cardTitle", this.config.title, (value) =>
           this.change((c) => {

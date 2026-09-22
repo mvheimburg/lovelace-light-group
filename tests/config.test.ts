@@ -24,6 +24,8 @@ describe("config", () => {
     { ...valid, sections: [{ name: 1, lights: [] }] },
     { ...valid, sections: [{ name: "x", lights: [{ entity: "switch.x" }] }] },
     { ...valid, title: 1 },
+    { ...valid, confirm_all_off: "false" },
+    { ...valid, show_all_off: "false" },
   ])("rejects malformed configuration %j", (value) =>
     expect(() => normalizeConfig(value)).toThrow(),
   );

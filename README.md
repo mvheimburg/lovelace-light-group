@@ -20,6 +20,8 @@ Edit the dashboard, add **Light Group Card**, and use its visual editor to:
 - Add room sections and select their lights with Home Assistant's entity selectors.
 - Reorder rooms and lights, or give them display names and icons.
 - Choose Default or Bubble appearance and a color scheme.
+- Hide or show the **All off** button.
+- Enable **Require confirmation for All off** when you want an extra approval step.
 
 Save the dashboard to keep changes. Cancel leaves the saved dashboard untouched. Configuration creates no backend entities or groups and changes no automations. The card's **Configure** cog explains where these options live, including when lights are unavailable. Incomplete new light rows remain editor drafts until a light is selected. An inline warning explains that the latest edits cannot be saved until you select the light or remove that row. Invalid YAML is reported inside the card/editor in the active language, with device actions disabled until the configuration is corrected.
 
@@ -56,6 +58,8 @@ sections:
 | `icon` | `mdi:lightbulb-group-outline` | Header icon. |
 | `appearance` | `default` | `default` or `bubble`; Bubble Card need not be installed. |
 | `color_scheme` | `home-assistant` | Theme colors, or `bright`, `warm`, `mint`, `sky`, `lavender`. The five explicit palettes stay light on a dark dashboard. |
+| `show_all_off` | `true` | Show the All off button; set to false to hide it. |
+| `confirm_all_off` | `false` | Ask for confirmation before turning off all lights in the card. |
 | `sections` | `[]` | Ordered rooms, each with `name`, optional `icon`, and a `lights` array. |
 | `sections[].lights[].entity` | Required | A `light.*` entity. |
 | `sections[].lights[].name` | HA friendly name | Display override; does not rename anything in HA. |
@@ -63,9 +67,11 @@ sections:
 
 ## Everyday controls
 
-Tap a light's **round icon** to turn it on/off. Its name opens a panel in the card's own style, with a brightness slider for lights whose supported color modes allow dimming. Slider changes are sent on release or keyboard change. **More controls** opens Home Assistant's light dialog for color, temperature and device-specific features. Brightness is an adjustable setting, so it opens controls rather than recorder history; this card displays no sensor readings.
+Tap a light's **round icon** to turn it on/off. Dimmable lights have a brightness slider directly on the tile, with a percentage readout. Its name also opens a panel in the card's own style with brightness and more controls. Slider changes are sent on release or keyboard change. **More controls** opens Home Assistant's light dialog for color, temperature and device-specific features. Brightness is an adjustable setting, so it opens controls rather than recorder history; this card displays no sensor readings.
 
-**All off** affects only available, currently on lights listed in this card. Repeated entity IDs are sent once. An existing HA light-group entity retains its normal HA behavior, including controlling its members.
+Disable **Show All off button** in the visual editor (YAML: `show_all_off: false`) to hide the zone-wide action.
+
+**All off** affects only available, currently on lights listed in this card. Enable **Require confirmation for All off** in the visual card editor (YAML: `confirm_all_off: true`) to show a confirmation dialog naming the floor/zone. Cancel or Escape leaves lights unchanged. Confirmation is off by default. Available lights are checked again when you confirm. Repeated entity IDs are sent once. An existing HA light-group entity retains its normal HA behavior, including controlling its members.
 
 Controls show **Updating…** until the service finishes and Home Assistant confirms the requested state. Overlapping requests are blocked; other lights remain usable. If a request fails or no confirmation arrives within 10 seconds, an error is shown. Brightness returns to the latest HA value on failure. No device state is invented locally. Unavailable/missing lights and disconnected HA data disable device actions; Configure stays accessible.
 

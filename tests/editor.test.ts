@@ -198,3 +198,34 @@ it("renders malformed configuration errors with hass assigned after setConfig", 
     editor.shadowRoot!.querySelector('[data-action="add-section"]'),
   ).not.toBeNull();
 });
+
+it("edits all-off confirmation without mutating saved configuration and localizes its label", async () => {
+  const original = { ...config(), confirm_all_off: false };
+  const editor = await mount(original);
+  const changed = vi.fn();
+  editor.addEventListener("config-changed", changed);
+  expect(editor.shadowRoot!.textContent).toContain("Require confirmation for All off");
+  await click(editor, '[name="confirm_all_off"]');
+  expect(changed.mock.lastCall![0].detail.config.confirm_all_off).toBe(true);
+  expect(original.confirm_all_off).toBe(false);
+  editor.hass = { ...editor.hass!, language: "no" };
+  await editor.updateComplete;
+  expect(editor.shadowRoot!.textContent).toContain("Krev bekreftelse for Alt av");
+  await click(editor, '[name="confirm_all_off"]');
+  expect(changed.mock.lastCall![0].detail.config.confirm_all_off).toBe(false);
+});
+
+it("lets the user hide and restore All off without losing confirmation preference", async () => {
+  const editor = await mount({ ...config(), confirm_all_off: true });
+  const changed = vi.fn();
+  editor.addEventListener("config-changed", changed);
+  const checkbox = editor.shadowRoot!.querySelector<HTMLInputElement>('[name="show_all_off"]');
+  expect(checkbox?.checked).toBe(true);
+  await click(editor, '[name="show_all_off"]');
+  expect(changed.mock.lastCall![0].detail.config).toMatchObject({ show_all_off: false, confirm_all_off: true });
+  editor.hass = { ...editor.hass!, language: "nb" };
+  await editor.updateComplete;
+  expect(editor.shadowRoot!.textContent).toContain("Vis Alt av-knapp");
+  await click(editor, '[name="show_all_off"]');
+  expect(changed.mock.lastCall![0].detail.config.show_all_off).toBe(true);
+});

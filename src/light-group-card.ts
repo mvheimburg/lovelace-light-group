@@ -24,9 +24,16 @@ export class LightGroupCard extends LitElement {
   private configError?: ConfigErrorCode;
   private selected?: LightConfig;
   private configuring = false;
+  private confirmingAllOff = false;
   private trigger?: HTMLElement;
   private draft?: number;
+  private inlineDrafts = new Map<string, number>();
+  private inlinePending = new Set<string>();
   private requests = new Requests(() => {
+    for (const id of this.inlineDrafts.keys()) {
+      if (this.requests.pending(id)) this.inlinePending.add(id);
+      else if (this.inlinePending.delete(id)) this.inlineDrafts.delete(id);
+    }
     if (
       this.requests?.error ||
       !this.selected ||
@@ -45,6 +52,8 @@ export class LightGroupCard extends LitElement {
       this.config = { type: TYPE, sections: [] };
       this.configError = error.code;
     }
+    this.inlineDrafts.clear();
+    this.inlinePending.clear();
     this.requests.reset();
     this.requestUpdate();
   }
@@ -69,8 +78,15 @@ export class LightGroupCard extends LitElement {
     return t(this.hass, key);
   }
   protected willUpdate(changed: PropertyValues): void {
-    if (changed.has("hass") && this.hass)
-      this.requests.reconcile(this.hass.states);
+    if (changed.has("hass")) {
+      for (const id of this.inlineDrafts.keys()) {
+        if (!this.hass || !available(this.hass, id)) {
+          this.inlineDrafts.delete(id);
+          this.inlinePending.delete(id);
+        }
+      }
+      if (this.hass) this.requests.reconcile(this.hass.states);
+    }
     this.setAttribute("appearance", this.config.appearance ?? "default");
     if (
       !this.config.color_scheme ||
@@ -81,11 +97,13 @@ export class LightGroupCard extends LitElement {
   }
   protected updated(): void {
     const dialog = this.renderRoot.querySelector<HTMLDialogElement>("dialog");
-    if ((this.selected || this.configuring) && dialog && !dialog.open)
+    if ((this.selected || this.configuring || this.confirmingAllOff) && dialog && !dialog.open)
       dialog.showModal();
   }
   disconnectedCallback(): void {
     this.close();
+    this.inlineDrafts.clear();
+    this.inlinePending.clear();
     this.requests.reset();
     super.disconnectedCallback();
   }
@@ -123,6 +141,13 @@ export class LightGroupCard extends LitElement {
       entity_id: id,
     });
   }
+  private requestAllOff(event: Event): void {
+    if (this.config.confirm_all_off) {
+      this.trigger = event.currentTarget as HTMLElement;
+      this.confirmingAllOff = true;
+      this.requestUpdate();
+    } else this.allOff();
+  }
   private allOff(): void {
     if (
       !this.hass ||
@@ -146,6 +171,7 @@ export class LightGroupCard extends LitElement {
     this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
     this.selected = undefined;
     this.configuring = false;
+    this.confirmingAllOff = false;
     this.draft = undefined;
     if (this.trigger?.isConnected) this.trigger.focus();
     this.trigger = undefined;
@@ -163,8 +189,8 @@ export class LightGroupCard extends LitElement {
       }),
     );
   }
-  private brightness(event: Event, commit: boolean): void {
-    const id = this.selected?.entity;
+  private brightness(event: Event, commit: boolean, inlineId?: string): void {
+    const id = inlineId ?? this.selected?.entity;
     const value = Number((event.target as HTMLInputElement).value);
     if (
       !id ||
@@ -175,7 +201,8 @@ export class LightGroupCard extends LitElement {
       value > 100
     )
       return;
-    this.draft = value;
+    if (inlineId) this.inlineDrafts.set(inlineId, value);
+    else this.draft = value;
     this.requestUpdate();
     if (commit)
       this.send(
@@ -197,6 +224,7 @@ export class LightGroupCard extends LitElement {
     const entity = this.hass?.states[id];
     const valid = !!this.hass && available(this.hass, id);
     const on = entity?.state === "on";
+    const brightness = this.inlineDrafts.get(id) ?? (entity?.state === "off" ? 0 : brightnessPercent(entity));
     const icon =
       light.icon ||
       (typeof entity?.attributes.icon === "string"
@@ -219,6 +247,7 @@ export class LightGroupCard extends LitElement {
       >
         <ha-icon .icon=${icon}></ha-icon>
       </button>
+      <div class="light-content">
       <button
         class="label"
         data-action="details"
@@ -229,6 +258,19 @@ export class LightGroupCard extends LitElement {
         <span class="name">${this.name(light)}</span
         ><span class="status">${this.status(id)}</span>
       </button>
+      ${supportsBrightness(entity) ? html`
+        <div class="inline-brightness">
+          <input type="range" min="0" max="100" step="1"
+            .value=${live(String(brightness ?? 0))}
+            aria-label=${`${this.t("brightness")}: ${this.name(light)}`}
+            aria-valuetext=${brightness === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, brightness)}
+            ?disabled=${!this.enabled(id)}
+            @input=${(e: Event) => this.brightness(e, false, id)}
+            @change=${(e: Event) => this.brightness(e, true, id)}
+          />
+          <output>${brightness === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, brightness)}</output>
+        </div>` : nothing}
+      </div>
     </div>`;
   }
   private dialog() {
@@ -246,7 +288,7 @@ export class LightGroupCard extends LitElement {
       <header>
         <div class="heading">
           <h2 id="dialog-title">
-            ${light ? this.name(light) : this.t("configure")}
+            ${light ? this.name(light) : this.t(this.confirmingAllOff ? "allOff" : "configure")}
           </h2>
           ${light ? html`<span class="status" aria-live="polite">${this.status(light.entity)}</span>` : nothing}
         </div>
@@ -261,7 +303,16 @@ export class LightGroupCard extends LitElement {
         </button>
       </header>
       ${
-        light
+        this.confirmingAllOff
+          ? html`<p>${this.t("allOffPrompt").replace("{title}", this.config.title || this.t("title"))}</p>
+              <div class="controls">
+                <button class="action" data-action="cancel-all-off" autofocus
+                  @click=${() => this.close()}>${this.t("cancel")}</button>
+                <button class="action primary" data-action="confirm-all-off"
+                  ?disabled=${!this.hass || !allOffTargets(this.config, this.hass).length || this.config.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity)))}
+                  @click=${() => { this.close(); this.allOff(); }}>${this.t("allOff")}</button>
+              </div>`
+          : light
           ? html`
               ${
                 supportsBrightness(entity)
@@ -323,15 +374,15 @@ export class LightGroupCard extends LitElement {
           <h2>${this.config.title || this.t("title")}</h2>
         </div>
         <div class="header-actions">
-          <button
+          ${this.config.show_all_off !== false ? html`<button
             class="all-off"
             data-action="all-off"
             ?disabled=${!ids.length || pending}
-            @click=${() => this.allOff()}
+            @click=${(event: Event) => this.requestAllOff(event)}
           >
             <ha-icon .icon=${"mdi:lightbulb-group-off-outline"}></ha-icon
             >${this.t("allOff")}
-          </button>
+          </button>` : nothing}
           <button
             class="round"
             data-action="configure"

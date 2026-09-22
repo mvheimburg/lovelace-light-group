@@ -23,6 +23,8 @@ export interface CardConfig {
   icon?: string;
   appearance?: "default" | "bubble";
   color_scheme?: ColorScheme;
+  confirm_all_off?: boolean;
+  show_all_off?: boolean;
   sections: SectionConfig[];
   [key: string]: unknown;
 }

@@ -79,7 +79,7 @@ it("commits brightness on change, shows pending, restores authoritative value on
   );
   await click(card, details);
   const slider = card.shadowRoot!.querySelector<HTMLInputElement>(
-    'input[type="range"]',
+    'dialog input[type="range"]',
   )!;
   expect(slider.value).toBe("50");
   slider.value = "42";
@@ -103,7 +103,7 @@ it("omits unsupported brightness and emits more-info", async () => {
   const event = vi.fn();
   card.addEventListener("hass-more-info", event);
   await click(card, '[data-entity="light.b"] [data-action="details"]');
-  expect(card.shadowRoot!.querySelector('input[type="range"]')).toBeNull();
+  expect(card.shadowRoot!.querySelector('dialog input[type="range"]')).toBeNull();
   await click(card, '[data-action="more"]');
   expect(event.mock.lastCall![0].detail).toEqual({ entityId: "light.b" });
 });
@@ -111,7 +111,7 @@ it("handles zero and missing brightness safely", async () => {
   const card = await mount();
   await click(card, details);
   const slider = card.shadowRoot!.querySelector<HTMLInputElement>(
-    'input[type="range"]',
+    'dialog input[type="range"]',
   )!;
   slider.value = "0";
   slider.dispatchEvent(new Event("change", { bubbles: true }));
@@ -222,4 +222,131 @@ it("renders invalid YAML in the active language even when config arrives before 
   await card.updateComplete;
   expect(card.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   expect(button(card, toggle).disabled).toBe(false);
+});
+
+it("requires optional confirmation, supports cancellation and translates the prompt live", async () => {
+  const card = await mount();
+  card.setConfig({ ...config(), title: "1. etasje", confirm_all_off: true });
+  await card.updateComplete;
+  await click(card, '[data-action="all-off"]');
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  expect(card.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(card.shadowRoot!.textContent).toContain("Turn off all lights in 1. etasje?");
+  card.hass = { ...card.hass!, language: "nb_NO" };
+  await card.updateComplete;
+  expect(card.shadowRoot!.textContent).toContain("Slå av alt lys i 1. etasje?");
+  await click(card, '[data-action="cancel-all-off"]');
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  await click(card, '[data-action="all-off"]');
+  await click(card, '[data-action="confirm-all-off"]');
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith(
+    "light", "turn_off", { entity_id: ["light.a"] },
+  );
+});
+
+it("rechecks availability while confirmation is open and closes it on config changes", async () => {
+  const card = await mount();
+  card.setConfig({ ...config(), confirm_all_off: true });
+  await card.updateComplete;
+  await click(card, '[data-action="all-off"]');
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  card.hass = { ...card.hass!, connection: { connected: false } };
+  await card.updateComplete;
+  expect(button(card, '[data-action="confirm-all-off"]').disabled).toBe(true);
+  await click(card, '[data-action="confirm-all-off"]');
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  card.setConfig(config());
+  await card.updateComplete;
+  expect(card.shadowRoot!.querySelector("dialog")?.open ?? false).toBe(false);
+});
+
+
+it("dims directly on the tile, waits for release and restores HA brightness after failure", async () => {
+  const card = await mount();
+  const slider = card.shadowRoot!.querySelector<HTMLInputElement>('[data-entity="light.a"] input[type="range"]');
+  expect(slider).not.toBeNull();
+  expect(card.shadowRoot!.querySelector('[data-entity="light.b"] input[type="range"]')).toBeNull();
+  expect(slider!.value).toBe("50");
+  let reject!: (error: Error) => void;
+  card.hass!.callService = vi.fn(() => new Promise((_, fail) => { reject = fail; }));
+  slider!.value = "37";
+  slider!.dispatchEvent(new Event("input", { bubbles: true }));
+  await card.updateComplete;
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  expect(slider!.value).toBe("37");
+  slider!.dispatchEvent(new Event("change", { bubbles: true }));
+  await card.updateComplete;
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_on", { entity_id: "light.a", brightness_pct: 37 });
+  expect(slider!.disabled).toBe(true);
+  reject(new Error("denied"));
+  await vi.waitFor(() => expect(slider!.disabled).toBe(false));
+  expect(slider!.value).toBe("50");
+  card.hass = { ...card.hass!, language: "nb", connection: { connected: false } };
+  await card.updateComplete;
+  expect(slider!.disabled).toBe(true);
+  expect(slider!.getAttribute("aria-label")).toBe("Lysstyrke: Kitchen ceiling");
+});
+
+it("supports explicit confirmation opt-out and cancels confirmation with Escape", async () => {
+  const card = await mount();
+  card.setConfig({ ...config(), confirm_all_off: true });
+  await card.updateComplete;
+  const trigger = button(card, '[data-action="all-off"]');
+  trigger.focus();
+  await click(card, '[data-action="all-off"]');
+  card.shadowRoot!.querySelector("dialog")!.dispatchEvent(new Event("cancel", { cancelable: true }));
+  await card.updateComplete;
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  expect(card.shadowRoot!.activeElement).toBe(trigger);
+  card.setConfig({ ...config(), confirm_all_off: false });
+  await card.updateComplete;
+  await click(card, '[data-action="all-off"]');
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_off", { entity_id: ["light.a"] });
+});
+
+it("uses current targets on confirmation instead of the lights on when the dialog opened", async () => {
+  const card = await mount();
+  card.setConfig({ ...config(), confirm_all_off: true });
+  await card.updateComplete;
+  await click(card, '[data-action="all-off"]');
+  card.hass = { ...card.hass!, states: { ...card.hass!.states, "light.a": state("light.a", "off"), "light.b": state("light.b", "on") } };
+  await card.updateComplete;
+  await click(card, '[data-action="confirm-all-off"]');
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_off", { entity_id: ["light.b"] });
+});
+
+it("can hide All off while retaining individual light controls", async () => {
+  const card = await mount();
+  card.setConfig({ ...config(), show_all_off: false });
+  await card.updateComplete;
+  expect(card.shadowRoot!.querySelector('[data-action="all-off"]')).toBeNull();
+  await click(card, toggle);
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_off", { entity_id: "light.a" });
+});
+
+it("preserves an active slider drag when another light request completes", async () => {
+  const card = await mount();
+  await click(card, '[data-entity="light.b"] [data-action="toggle"]');
+  const slider = card.shadowRoot!.querySelector<HTMLInputElement>('[data-entity="light.a"] input')!;
+  slider.value = "37";
+  slider.dispatchEvent(new Event("input"));
+  await card.updateComplete;
+  card.hass = { ...card.hass!, states: { ...card.hass!.states, "light.b": state("light.b", "on") } };
+  await card.updateComplete;
+  expect(slider.value).toBe("37");
+});
+
+it("discards an interrupted drag when HA disconnects", async () => {
+  const card = await mount();
+  const slider = card.shadowRoot!.querySelector<HTMLInputElement>('[data-entity="light.a"] input')!;
+  slider.value = "37";
+  slider.dispatchEvent(new Event("input"));
+  await card.updateComplete;
+  card.hass = { ...card.hass!, connection: { connected: false } };
+  await card.updateComplete;
+  slider.dispatchEvent(new Event("change"));
+  card.hass = { ...fixture(), states: { "light.a": state("light.a", "on", { brightness: 204, supported_color_modes: ["brightness"] }) } };
+  await card.updateComplete;
+  expect(slider.value).toBe("80");
+  expect(card.hass!.callService).not.toHaveBeenCalled();
 });
