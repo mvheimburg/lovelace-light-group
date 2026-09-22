@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-09-22
 
 - Add hue and saturation controls directly to color-light popups.
 - Add optional per-room power and shared brightness controls in the visual editor.
