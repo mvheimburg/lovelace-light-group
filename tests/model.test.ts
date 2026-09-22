@@ -4,6 +4,8 @@ import {
   available,
   brightnessPercent,
   supportsBrightness,
+  supportsColor,
+  hsColor,
 } from "../src/model";
 import { normalizeConfig } from "../src/config";
 const entity = (state = "on", attributes: Record<string, unknown> = {}) => ({
@@ -66,3 +68,13 @@ it.each([NaN, Infinity, -1, 256, "128", undefined])(
 );
 it("converts valid brightness", () =>
   expect(brightnessPercent(entity("on", { brightness: 128 }))).toBe(50));
+
+it.each(["hs", "xy", "rgb", "rgbw", "rgbww"])("offers direct color for %s lights", (mode) => {
+  expect(supportsColor(entity("on", { supported_color_modes: [mode] }))).toBe(true);
+});
+it.each(["brightness", "color_temp", "white", "onoff"])("omits color controls for %s lights", (mode) => {
+  expect(supportsColor(entity("on", { supported_color_modes: [mode] }))).toBe(false);
+});
+it.each([undefined, [], [NaN, 50], [20, 101], [361, 50], ["red", 50]])("ignores malformed reported color %j", (value) => {
+  expect(hsColor(entity("on", { hs_color: value }))).toBeUndefined();
+});

@@ -350,3 +350,152 @@ it("discards an interrupted drag when HA disconnects", async () => {
   expect(slider.value).toBe("80");
   expect(card.hass!.callService).not.toHaveBeenCalled();
 });
+
+it.each(["inline", "popup"])("turns an off dimmable light on from zero using the %s slider", async (surface) => {
+  const card = await mount();
+  card.hass = { ...fixture(), states: { "light.a": state("light.a", "off", { brightness: 128, supported_color_modes: ["brightness"] }) } };
+  await card.updateComplete;
+  if (surface === "popup") await click(card, details);
+  const selector = surface === "popup" ? 'dialog input[type="range"]' : '[data-entity="light.a"] input[type="range"]';
+  const slider = card.shadowRoot!.querySelector<HTMLInputElement>(selector)!;
+  expect(slider.value).toBe("0");
+  expect(slider.disabled).toBe(false);
+  slider.value = "35";
+  slider.dispatchEvent(new Event("change"));
+  await card.updateComplete;
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_on", { entity_id: "light.a", brightness_pct: 35 });
+});
+
+it("offers color directly in the popup and waits for HA color confirmation", async () => {
+  const card = await mount();
+  card.hass = { ...fixture(), states: { "light.a": state("light.a", "on", { supported_color_modes: ["rgb"], hs_color: [120, 70], brightness: 128 }) } };
+  await card.updateComplete;
+  await click(card, details);
+  const hue = card.shadowRoot!.querySelector<HTMLInputElement>('[data-control="hue"]');
+  expect(hue).not.toBeNull();
+  expect(hue!.value).toBe("120");
+  hue!.value = "240";
+  hue!.dispatchEvent(new Event("input"));
+  await card.updateComplete;
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  hue!.dispatchEvent(new Event("change"));
+  await card.updateComplete;
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_on", { entity_id: "light.a", hs_color: [240, 70] });
+  expect(hue!.disabled).toBe(true);
+  card.hass = { ...card.hass!, states: { "light.a": state("light.a", "on", { supported_color_modes: ["rgb"], hs_color: [240, 70], brightness: 128 }) } };
+  await card.updateComplete;
+  expect(hue!.disabled).toBe(false);
+  card.hass = { ...card.hass!, language: "nb_NO" };
+  await card.updateComplete;
+  expect(hue!.getAttribute("aria-label")).toBe("Fargetone");
+});
+
+it("restores reported color on failure and omits color for non-color lights", async () => {
+  const card = await mount();
+  await click(card, details);
+  expect(card.shadowRoot!.querySelector('[data-control="hue"]')).toBeNull();
+  card.hass = { ...fixture(), states: { "light.a": state("light.a", "on", { supported_color_modes: ["hs"], hs_color: [30, 80] }) }, callService: vi.fn(async () => { throw new Error("denied"); }) };
+  await card.updateComplete;
+  const saturation = card.shadowRoot!.querySelector<HTMLInputElement>('[data-control="saturation"]');
+  expect(saturation).not.toBeNull();
+  saturation!.value = "40";
+  saturation!.dispatchEvent(new Event("change"));
+  await vi.waitFor(() => expect(saturation!.value).toBe("80"));
+  expect(card.shadowRoot!.textContent).toContain("denied");
+  card.hass = { ...card.hass!, connection: { connected: false } };
+  await card.updateComplete;
+  expect(saturation!.disabled).toBe(true);
+});
+
+it("provides opt-in room power controls scoped to unique available members", async () => {
+  const card = await mount();
+  expect(card.shadowRoot!.querySelector('[data-action="room-toggle"]')).toBeNull();
+  const c = config();
+  card.setConfig({ ...c, sections: [{ ...c.sections[0], show_controls: true }] });
+  await card.updateComplete;
+  await click(card, '[data-action="room-toggle"]');
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_off", { entity_id: ["light.a"] });
+});
+
+it("dims all available dimmable room lights including off lights without touching on/off-only lights", async () => {
+  const card = await mount();
+  const c = config();
+  card.setConfig({ ...c, sections: [{ ...c.sections[0], show_controls: true, lights: [...c.sections[0].lights, { entity: "light.d" }] }] });
+  card.hass = { ...fixture(), states: { ...fixture().states, "light.d": state("light.d", "off", { supported_color_modes: ["brightness"] }) } };
+  await card.updateComplete;
+  const slider = card.shadowRoot!.querySelector<HTMLInputElement>('[data-control="room-brightness"]');
+  expect(slider).not.toBeNull();
+  expect(slider!.value).toBe("25");
+  slider!.value = "60";
+  slider!.dispatchEvent(new Event("input"));
+  await card.updateComplete;
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  slider!.dispatchEvent(new Event("change"));
+  await card.updateComplete;
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_on", { entity_id: ["light.a", "light.d"], brightness_pct: 60 });
+  expect(slider!.disabled).toBe(true);
+  expect(button(card, toggle).disabled).toBe(true);
+});
+
+it("uses the configured confirmation for room off and names that room", async () => {
+  const card = await mount();
+  const c = config();
+  card.setConfig({ ...c, confirm_all_off: true, sections: [{ ...c.sections[0], show_controls: true }] });
+  await card.updateComplete;
+  await click(card, '[data-action="room-toggle"]');
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  expect(card.shadowRoot!.querySelector("dialog")!.textContent).toContain("Kjøkken?");
+  await click(card, '[data-action="confirm-all-off"]');
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_off", { entity_id: ["light.a"] });
+});
+
+it("turns an entirely off room on and disables room actions while disconnected", async () => {
+  const card = await mount();
+  card.setConfig({ ...config(), sections: [{ name: "Herjerom", show_controls: true, lights: [{ entity: "light.a" }, { entity: "light.b" }] }] });
+  card.hass = { ...fixture(), states: { ...fixture().states, "light.a": state("light.a", "off", { supported_color_modes: ["brightness"] }) } };
+  await card.updateComplete;
+  await click(card, '[data-action="room-toggle"]');
+  expect(card.hass!.callService).toHaveBeenCalledExactlyOnceWith("light", "turn_on", { entity_id: ["light.a", "light.b"] });
+  card.hass = { ...card.hass!, connection: { connected: false } };
+  await card.updateComplete;
+  expect(button(card, '[data-action="room-toggle"]').disabled).toBe(true);
+  expect(card.shadowRoot!.querySelector<HTMLInputElement>('[data-control="room-brightness"]')!.disabled).toBe(true);
+});
+
+it("retains the room brightness request through unrelated updates and restores it on failure", async () => {
+  const card = await mount();
+  const c = config();
+  card.setConfig({ ...c, sections: [{ ...c.sections[0], show_controls: true }] });
+  let reject!: (error: Error) => void;
+  card.hass!.callService = vi.fn(() => new Promise((_, fail) => { reject = fail; }));
+  await card.updateComplete;
+  const slider = card.shadowRoot!.querySelector<HTMLInputElement>('[data-control="room-brightness"]')!;
+  slider.value = "65";
+  slider.dispatchEvent(new Event("change"));
+  await card.updateComplete;
+  card.hass = { ...card.hass! };
+  await card.updateComplete;
+  expect(slider.value).toBe("65");
+  reject(new Error("denied"));
+  await vi.waitFor(() => expect(slider.disabled).toBe(false));
+  expect(slider.value).toBe("50");
+  expect(card.shadowRoot!.textContent).toContain("denied");
+});
+
+it("clears unsubmitted color on disconnect and when selecting another light", async () => {
+  const card = await mount();
+  card.hass = { ...fixture(), states: { "light.a": state("light.a", "on", { supported_color_modes: ["hs"], hs_color: [30, 80] }) } };
+  await card.updateComplete;
+  await click(card, details);
+  const hue = card.shadowRoot!.querySelector<HTMLInputElement>('[data-control="hue"]')!;
+  hue.value = "240";
+  hue.dispatchEvent(new Event("input"));
+  await card.updateComplete;
+  card.hass = { ...card.hass!, connection: { connected: false } };
+  await card.updateComplete;
+  expect(hue.value).toBe("30");
+  expect(card.hass!.callService).not.toHaveBeenCalled();
+  await click(card, '[data-action="close"]');
+  await click(card, '[data-entity="light.b"] [data-action="details"]');
+  expect(card.shadowRoot!.querySelector('[data-control="hue"]')).toBeNull();
+});

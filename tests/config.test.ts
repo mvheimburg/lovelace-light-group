@@ -26,6 +26,7 @@ describe("config", () => {
     { ...valid, title: 1 },
     { ...valid, confirm_all_off: "false" },
     { ...valid, show_all_off: "false" },
+    { ...valid, sections: [{ name: "Room", lights: [], show_controls: "true" }] },
   ])("rejects malformed configuration %j", (value) =>
     expect(() => normalizeConfig(value)).toThrow(),
   );

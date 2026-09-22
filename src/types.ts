@@ -13,6 +13,7 @@ export interface LightConfig {
   icon?: string;
 }
 export interface SectionConfig {
+  show_controls?: boolean;
   name: string;
   icon?: string;
   lights: LightConfig[];

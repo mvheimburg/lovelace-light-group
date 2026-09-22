@@ -14,7 +14,8 @@ export type ConfigErrorCode =
   | "invalidLight"
   | "invalidText"
   | "invalidConfirmation"
-  | "invalidAllOffVisibility";
+  | "invalidAllOffVisibility"
+  | "invalidRoomControls";
 export class ConfigValidationError extends Error {
   constructor(readonly code: ConfigErrorCode) {
     super(code);
@@ -59,6 +60,8 @@ export function normalizeConfig(input: unknown): CardConfig {
       if (typeof s.name !== "string" || !Array.isArray(s.lights))
         throw new ConfigValidationError("invalidRoom");
       optional(s, "icon");
+      if (s.show_controls !== undefined && typeof s.show_controls !== "boolean")
+        throw new ConfigValidationError("invalidRoomControls");
       return {
         ...s,
         name: s.name,

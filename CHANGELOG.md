@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add hue and saturation controls directly to color-light popups.
+- Add optional per-room power and shared brightness controls in the visual editor.
+- Verify that both brightness sliders turn lights on when raised above zero.
+
 ## 0.1.1 — 2026-09-22
 
 - Add brightness sliders directly to dimmable light tiles.

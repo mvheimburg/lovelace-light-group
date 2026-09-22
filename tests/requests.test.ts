@@ -82,3 +82,33 @@ it("handles synchronous throws and zero brightness without stale brightness attr
   r.reconcile(states("off", 128));
   expect(r.pending("light.a")).toBe(false);
 });
+
+it("waits for color rather than merely the on state and handles hue wraparound", async () => {
+  const r = new Requests(vi.fn());
+  r.start(["light.a"], { state: "on", hsColor: [359, 80], previousHsColor: [120, 80] }, async () => {});
+  await Promise.resolve();
+  r.reconcile({ "light.a": { ...states("on")["light.a"], attributes: { hs_color: [120, 80] } } });
+  expect(r.pending("light.a")).toBe(true);
+  r.reconcile({ "light.a": { ...states("on")["light.a"], attributes: { hs_color: [1, 80] } } });
+  expect(r.pending("light.a")).toBe(false);
+});
+
+it("accepts HA's reported color after conversion to an XY light's gamut", async () => {
+  const r = new Requests(vi.fn());
+  r.start(["light.a"], { state: "on", hsColor: [300, 100], previousHsColor: [120, 80] }, async () => {});
+  await Promise.resolve();
+  r.reconcile({ "light.a": { ...states("on")["light.a"], attributes: { hs_color: [120, 80] } } });
+  expect(r.pending("light.a")).toBe(true);
+  r.reconcile({ "light.a": { ...states("on")["light.a"], attributes: { hs_color: [299.754, 95.686] } } });
+  expect(r.pending("light.a")).toBe(false);
+});
+
+it("accepts the first reported converted color when an off light had no color attributes", async () => {
+  const r = new Requests(vi.fn());
+  r.start(["light.a"], { state: "on", hsColor: [300, 100] }, async () => {});
+  await Promise.resolve();
+  r.reconcile(states("on"));
+  expect(r.pending("light.a")).toBe(true);
+  r.reconcile({ "light.a": { ...states("on")["light.a"], attributes: { hs_color: [299.754, 95.686] } } });
+  expect(r.pending("light.a")).toBe(false);
+});

@@ -19,6 +19,7 @@ Edit the dashboard, add **Light Group Card**, and use its visual editor to:
 - Set a floor/zone title and icon.
 - Add room sections and select their lights with Home Assistant's entity selectors.
 - Reorder rooms and lights, or give them display names and icons.
+- Enable **Show room power and brightness controls** separately for each room.
 - Choose Default or Bubble appearance and a color scheme.
 - Hide or show the **All off** button.
 - Enable **Require confirmation for All off** when you want an extra approval step.
@@ -61,13 +62,22 @@ sections:
 | `show_all_off` | `true` | Show the All off button; set to false to hide it. |
 | `confirm_all_off` | `false` | Ask for confirmation before turning off all lights in the card. |
 | `sections` | `[]` | Ordered rooms, each with `name`, optional `icon`, and a `lights` array. |
+| `sections[].show_controls` | `false` | Show shared on/off and brightness controls for this room. |
 | `sections[].lights[].entity` | Required | A `light.*` entity. |
 | `sections[].lights[].name` | HA friendly name | Display override; does not rename anything in HA. |
 | `sections[].lights[].icon` | Entity icon or lightbulb | Display icon override. |
 
 ## Everyday controls
 
-Tap a light's **round icon** to turn it on/off. Dimmable lights have a brightness slider directly on the tile, with a percentage readout. Its name also opens a panel in the card's own style with brightness and more controls. Slider changes are sent on release or keyboard change. **More controls** opens Home Assistant's light dialog for color, temperature and device-specific features. Brightness is an adjustable setting, so it opens controls rather than recorder history; this card displays no sensor readings.
+Tap a light's **round icon** to turn it on/off. Dimmable lights have a brightness slider directly on the tile, with a percentage readout. Its name also opens a panel in the card's own style with brightness and more controls. Slider changes are sent on release or keyboard change. **Color lights** also show hue and saturation sliders with a color preview directly in the popup. Color changes are sent on release or keyboard change, using the light’s reported capabilities. The final color follows Home Assistant’s reported value, including device color-range conversion. **More controls** opens Home Assistant’s light dialog for temperature and device-specific features. Brightness is an adjustable setting, so it opens controls rather than recorder history; this card displays no sensor readings.
+
+Raising brightness from 0 sends `light.turn_on` with the selected `brightness_pct`, including when a light is off. Setting it to 0 requests off through Home Assistant. If a KNX light dims only after a separate power-on, check its absolute dimming address, actuator settings and state feedback in the KNX integration; the card does not send separate KNX telegrams or run a switching sequence.
+
+### Room controls
+
+Enable **Show room power and brightness controls** in a room’s visual editor settings (`sections[].show_controls: true`). The power button turns the room off when any available member is on, or turns available members on when all are off. The card’s **Require confirmation for All off** preference also applies to turning a room off, with that room named in the prompt.
+
+The shared slider sets all available dimmable members to the same brightness, including lights currently off; on/off-only lights are unchanged. The resting slider position is the average of their reported levels, counting off lights as zero. **Mixed** indicates differing levels; unknown brightness is labelled rather than claimed as zero. Room controls affect only the light entities listed in the section, deduplicate repeated entries, and skip unavailable members. They do not discover other Home Assistant area members or create a light group. Existing HA light-group entities retain their own membership behavior. Overlapping requests disable room controls, and failures restore reported values.
 
 Disable **Show All off button** in the visual editor (YAML: `show_all_off: false`) to hide the zone-wide action.
 

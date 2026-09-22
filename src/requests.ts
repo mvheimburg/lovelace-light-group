@@ -1,6 +1,6 @@
-import { brightnessPercent } from "./model";
+import { brightnessPercent, hsColor } from "./model";
 import type { HassEntity } from "./types";
-export type Expected = { state: "on" | "off"; brightnessPct?: number };
+export type Expected = { state: "on" | "off"; brightnessPct?: number; hsColor?: [number, number]; previousHsColor?: [number, number] };
 interface Request {
   ids: string[];
   expected: Expected;
@@ -71,6 +71,18 @@ export class Requests {
         const state = states[id];
         const expected = request.expected;
         if (state?.state !== expected.state) return false;
+        if (expected.hsColor) {
+          const actual = hsColor(state);
+          if (!actual) return false;
+          const hueDelta = Math.abs(actual[0] - expected.hsColor[0]);
+          // Accept the requested color or an authoritative changed color.
+          // HA/device gamut conversion can differ substantially from requested HS.
+          const matches = Math.abs(actual[1] - expected.hsColor[1]) <= 3 &&
+            (expected.hsColor[1] <= 3 || Math.min(hueDelta, 360 - hueDelta) <= 3);
+          const changed = !expected.previousHsColor ||
+            actual.some((value, index) => Math.abs(value - expected.previousHsColor![index]) > 0.01);
+          if (!matches && !changed) return false;
+        }
         if (expected.brightnessPct === undefined || expected.state === "off")
           return true;
         const actual = brightnessPercent(state);

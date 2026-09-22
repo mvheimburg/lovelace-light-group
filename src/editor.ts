@@ -234,6 +234,15 @@ export class LightGroupEditor extends LitElement {
   private section(section: SectionConfig, index: number) {
     return html`<fieldset data-section=${index}>
       <legend>${section.name || this.t("newRoom")}</legend>
+      <label>
+        ${this.t("roomControls")}
+        <input type="checkbox" name=${`section-controls-${index}`}
+          .checked=${live(section.show_controls ?? false)}
+          @change=${(e: Event) => this.change((c) => {
+            c.sections[index].show_controls = (e.target as HTMLInputElement).checked;
+          })}
+        />
+      </label>
       <div class="fields">
         ${this.text(
           `section-name-${index}`,

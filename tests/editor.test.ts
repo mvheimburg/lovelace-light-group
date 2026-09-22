@@ -229,3 +229,17 @@ it("lets the user hide and restore All off without losing confirmation preferenc
   await click(editor, '[name="show_all_off"]');
   expect(changed.mock.lastCall![0].detail.config.show_all_off).toBe(true);
 });
+
+it("configures room controls independently without mutating the saved sections", async () => {
+  const original = config();
+  const editor = await mount(original);
+  const changed = vi.fn();
+  editor.addEventListener("config-changed", changed);
+  expect(editor.shadowRoot!.textContent).toContain("Show room power and brightness controls");
+  await click(editor, '[name="section-controls-0"]');
+  expect(changed.mock.lastCall![0].detail.config.sections[0].show_controls).toBe(true);
+  expect(original.sections[0].show_controls).toBeUndefined();
+  editor.hass = { ...editor.hass!, language: "nb" };
+  await editor.updateComplete;
+  expect(editor.shadowRoot!.textContent).toContain("Vis av/på og lysstyrke for rommet");
+});

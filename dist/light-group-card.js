@@ -95,6 +95,8 @@ function normalizeConfig(input) {
             if (typeof s.name !== "string" || !Array.isArray(s.lights))
                 throw new ConfigValidationError("invalidRoom");
             optional(s, "icon");
+            if (s.show_controls !== undefined && typeof s.show_controls !== "boolean")
+                throw new ConfigValidationError("invalidRoomControls");
             return {
                 ...s,
                 name: s.name,
@@ -140,6 +142,14 @@ const en = {
     failed: "Could not update lights",
     timeout: "No confirmation from the light. Check its state and try again.",
     brightness: "Brightness",
+    hue: "Hue",
+    saturation: "Saturation",
+    color: "Color",
+    unknownColor: "Color not reported",
+    roomControls: "Show room power and brightness controls",
+    roomBrightness: "Room brightness",
+    mixed: "Mixed",
+    invalidRoomControls: "Room controls must be true or false.",
     unknownBrightness: "Brightness not reported",
     more: "More controls",
     close: "Close",
@@ -198,6 +208,14 @@ const nb = {
     failed: "Kunne ikke endre lysene",
     timeout: "Ingen bekreftelse fra lyset. Kontroller tilstanden og prøv igjen.",
     brightness: "Lysstyrke",
+    hue: "Fargetone",
+    saturation: "Fargemetning",
+    color: "Farge",
+    unknownColor: "Farge er ikke oppgitt",
+    roomControls: "Vis av/på og lysstyrke for rommet",
+    roomBrightness: "Lysstyrke for rommet",
+    mixed: "Ulik lysstyrke",
+    invalidRoomControls: "Romkontroller må være true eller false.",
     unknownBrightness: "Lysstyrke er ikke oppgitt",
     more: "Flere kontroller",
     close: "Lukk",
@@ -292,6 +310,18 @@ function allOffTargets(config, hass) {
         ...new Set(config.sections.flatMap((s) => s.lights.map((l) => l.entity))),
     ].filter((id) => available(hass, id) && hass.states[id].state === "on");
 }
+function supportsColor(entity) {
+    const modes = entity?.attributes.supported_color_modes;
+    return Array.isArray(modes) && modes.some((mode) => ["hs", "xy", "rgb", "rgbw", "rgbww"].includes(mode));
+}
+function hsColor(entity) {
+    const value = entity?.attributes.hs_color;
+    if (!Array.isArray(value) || value.length !== 2 ||
+        !value.every((v) => typeof v === "number" && Number.isFinite(v)) ||
+        value[0] < 0 || value[0] > 360 || value[1] < 0 || value[1] > 100)
+        return;
+    return [value[0], value[1]];
+}
 
 /** Tracks acknowledgements only. HA owns device state; no state is synthesized here. */
 class Requests {
@@ -357,6 +387,20 @@ class Requests {
                 const expected = request.expected;
                 if (state?.state !== expected.state)
                     return false;
+                if (expected.hsColor) {
+                    const actual = hsColor(state);
+                    if (!actual)
+                        return false;
+                    const hueDelta = Math.abs(actual[0] - expected.hsColor[0]);
+                    // Accept the requested color or an authoritative changed color.
+                    // HA/device gamut conversion can differ substantially from requested HS.
+                    const matches = Math.abs(actual[1] - expected.hsColor[1]) <= 3 &&
+                        (expected.hsColor[1] <= 3 || Math.min(hueDelta, 360 - hueDelta) <= 3);
+                    const changed = !expected.previousHsColor ||
+                        actual.some((value, index) => Math.abs(value - expected.previousHsColor[index]) > 0.01);
+                    if (!matches && !changed)
+                        return false;
+                }
                 if (expected.brightnessPct === undefined || expected.state === "off")
                     return true;
                 const actual = brightnessPercent(state);
@@ -745,6 +789,81 @@ const styles = [
       background: color-mix(in srgb, var(--lg-accent) 24%, var(--lg-surface));
       color: var(--primary-text-color, #262d38);
     }
+    .room-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+      padding: 8px 12px;
+      border-radius: 22px;
+      background: var(--lg-pill);
+    }
+    .room-controls .round {
+      background: var(--lg-surface);
+    }
+    .room-controls output {
+      font-size: 12px;
+      color: var(--lg-muted);
+      overflow-wrap: anywhere;
+    }
+    .room-brightness {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 100px;
+      font-size: 12px;
+    }
+    .room-brightness input,
+    .color-controls input {
+      width: 100%;
+      min-height: 44px;
+      margin: 0;
+      accent-color: var(--lg-accent);
+    }
+    input[type="range"]:focus-visible {
+      outline: 3px solid var(--lg-accent);
+      outline-offset: 2px;
+      border-radius: 8px;
+    }
+    .color-controls {
+      display: grid;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .color-controls label {
+      display: grid;
+      gap: 4px;
+    }
+    .color-swatch {
+      width: 32px;
+      height: 24px;
+      border: 1px solid var(--divider-color, #888);
+      border-radius: 8px;
+    }
+    .hue {
+      appearance: none;
+      background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00) center / 100% 12px no-repeat;
+    }
+    .hue::-webkit-slider-thumb {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--lg-surface);
+      border-radius: 50%;
+      background: var(--lg-accent);
+      box-shadow: 0 0 0 1px var(--lg-muted);
+    }
+    .hue::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--lg-surface);
+      border-radius: 50%;
+      background: var(--lg-accent);
+    }
+    .color-controls input:disabled {
+      opacity: 0.5;
+    }
     .brightness {
       display: grid;
       gap: 16px;
@@ -790,9 +909,21 @@ class LightGroupCard extends i$1 {
         this.config = { type: TYPE, sections: [] };
         this.configuring = false;
         this.confirmingAllOff = false;
+        this.colorPending = false;
+        this.roomDrafts = new Map();
         this.inlineDrafts = new Map();
         this.inlinePending = new Set();
         this.requests = new Requests(() => {
+            for (const [section, draft] of this.roomDrafts) {
+                if (draft.ids.some((id) => this.requests.pending(id)))
+                    draft.pending = true;
+                else if (draft.pending)
+                    this.roomDrafts.delete(section);
+            }
+            if (this.colorPending && (!this.selected || !this.requests.pending(this.selected.entity))) {
+                this.colorDraft = undefined;
+                this.colorPending = false;
+            }
             for (const id of this.inlineDrafts.keys()) {
                 if (this.requests.pending(id))
                     this.inlinePending.add(id);
@@ -818,6 +949,7 @@ class LightGroupCard extends i$1 {
             this.config = { type: TYPE, sections: [] };
             this.configError = error.code;
         }
+        this.roomDrafts.clear();
         this.inlineDrafts.clear();
         this.inlinePending.clear();
         this.requests.reset();
@@ -839,6 +971,14 @@ class LightGroupCard extends i$1 {
     }
     willUpdate(changed) {
         if (changed.has("hass")) {
+            if (this.selected && (!this.hass || !available(this.hass, this.selected.entity))) {
+                this.colorDraft = undefined;
+                this.draft = undefined;
+            }
+            for (const [section, draft] of this.roomDrafts) {
+                if (!this.hass || draft.ids.some((id) => !available(this.hass, id)))
+                    this.roomDrafts.delete(section);
+            }
             for (const id of this.inlineDrafts.keys()) {
                 if (!this.hass || !available(this.hass, id)) {
                     this.inlineDrafts.delete(id);
@@ -862,6 +1002,7 @@ class LightGroupCard extends i$1 {
     }
     disconnectedCallback() {
         this.close();
+        this.roomDrafts.clear();
         this.inlineDrafts.clear();
         this.inlinePending.clear();
         this.requests.reset();
@@ -893,26 +1034,30 @@ class LightGroupCard extends i$1 {
             entity_id: id,
         });
     }
-    requestAllOff(event) {
+    requestAllOff(event, section) {
         if (this.config.confirm_all_off) {
             this.trigger = event.currentTarget;
             this.confirmingAllOff = true;
+            this.confirmationSection = section;
             this.requestUpdate();
         }
         else
-            this.allOff();
+            this.allOff(section);
     }
-    allOff() {
+    allOff(section) {
+        const config = section ? { ...this.config, sections: [section] } : this.config;
         if (!this.hass ||
-            this.config.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity))))
+            config.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity))))
             return;
-        const ids = allOffTargets(this.config, this.hass);
+        const ids = allOffTargets(config, this.hass);
         if (ids.length)
             this.send(ids, { state: "off" }, "turn_off", { entity_id: ids });
     }
     open(light, event) {
         this.trigger = event.currentTarget;
         this.selected = light;
+        this.colorDraft = undefined;
+        this.colorPending = false;
         this.configuring = !light;
         this.draft = undefined;
         this.requestUpdate();
@@ -922,6 +1067,9 @@ class LightGroupCard extends i$1 {
         this.selected = undefined;
         this.configuring = false;
         this.confirmingAllOff = false;
+        this.confirmationSection = undefined;
+        this.colorDraft = undefined;
+        this.colorPending = false;
         this.draft = undefined;
         if (this.trigger?.isConnected)
             this.trigger.focus();
@@ -956,6 +1104,107 @@ class LightGroupCard extends i$1 {
         this.requestUpdate();
         if (commit)
             this.send([id], { state: value === 0 ? "off" : "on", brightnessPct: value }, "turn_on", { entity_id: id, brightness_pct: value });
+    }
+    setColor(event, channel, commit) {
+        const id = this.selected?.entity;
+        const value = Number(event.target.value);
+        if (!id || !this.enabled(id) || !supportsColor(this.hass?.states[id]) ||
+            !Number.isFinite(value) || value < 0 || value > (channel === 0 ? 360 : 100))
+            return;
+        const color = [...(this.colorDraft ?? hsColor(this.hass?.states[id]) ?? [0, 100])];
+        color[channel] = value;
+        this.colorDraft = color;
+        this.requestUpdate();
+        if (commit) {
+            this.colorPending = true;
+            this.send([id], { state: "on", hsColor: color, previousHsColor: hsColor(this.hass?.states[id]) }, "turn_on", { entity_id: id, hs_color: color });
+        }
+    }
+    roomIds(section, dimmable = false) {
+        return [...new Set(section.lights.map((l) => l.entity))].filter((id) => this.hass && available(this.hass, id) && (!dimmable || supportsBrightness(this.hass.states[id])));
+    }
+    roomBusy(section) {
+        return section.lights.some((l) => this.requests.pending(l.entity));
+    }
+    toggleRoom(section, event) {
+        if (this.roomBusy(section))
+            return;
+        const ids = this.roomIds(section);
+        if (ids.some((id) => this.hass.states[id].state === "on"))
+            this.requestAllOff(event, section);
+        else
+            this.send(ids, { state: "on" }, "turn_on", { entity_id: ids });
+    }
+    dimRoom(section, event, commit) {
+        const ids = this.roomIds(section, true);
+        const value = Number(event.target.value);
+        if (!ids.length || this.roomBusy(section) || !Number.isFinite(value) || value < 0 || value > 100)
+            return;
+        this.roomDrafts.set(section, { value, ids, pending: false });
+        this.requestUpdate();
+        if (commit)
+            this.send(ids, { state: value === 0 ? "off" : "on", brightnessPct: value }, "turn_on", { entity_id: ids, brightness_pct: value });
+    }
+    roomControls(section) {
+        const ids = this.roomIds(section);
+        const dimmable = this.roomIds(section, true);
+        const on = ids.some((id) => this.hass.states[id].state === "on");
+        const busy = this.roomBusy(section);
+        const levels = dimmable.map((id) => this.hass.states[id].state === "off" ? 0 : brightnessPercent(this.hass.states[id]));
+        const known = levels.length > 0 && levels.every((level) => level !== undefined);
+        const average = known ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : undefined;
+        const value = this.roomDrafts.get(section)?.value ?? average;
+        const mixed = this.roomDrafts.get(section) === undefined && new Set(levels).size > 1;
+        return b `<div class="room-controls" aria-busy=${String(busy)}>
+      <button class="round" data-action="room-toggle"
+        aria-label=${`${this.t(on ? "turnOff" : "turnOn")}: ${section.name}`}
+        title=${this.t(on ? "turnOff" : "turnOn")}
+        aria-pressed=${String(on)}
+        ?disabled=${!ids.length || busy}
+        @click=${(e) => this.toggleRoom(section, e)}>
+        <ha-icon .icon=${"mdi:power"}></ha-icon>
+      </button>
+      ${section.lights.some((l) => supportsBrightness(this.hass?.states[l.entity])) ? b `
+        <label class="room-brightness">
+          <span>${this.t("roomBrightness")}</span>
+          <input type="range" data-control="room-brightness" min="0" max="100" step="1"
+            aria-label=${`${this.t("roomBrightness")}: ${section.name}`}
+            aria-valuetext=${value === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, value)}
+            .value=${l(String(value ?? 0))} ?disabled=${!dimmable.length || busy}
+            @input=${(e) => this.dimRoom(section, e, false)}
+            @change=${(e) => this.dimRoom(section, e, true)} />
+        </label>
+        <output>${busy ? this.t("pending") : value === undefined ? this.t("unknownBrightness") : mixed ? this.t("mixed") : formatPercent(this.hass, value)}</output>
+      ` : A}
+    </div>`;
+    }
+    colorControls(light) {
+        const entity = this.hass?.states[light.entity];
+        if (!supportsColor(entity))
+            return A;
+        const actual = hsColor(entity);
+        const [hue, saturation] = this.colorDraft ?? actual ?? [0, 100];
+        return b `<div class="color-controls">
+      <div class="brightness-label"><span>${this.t("color")}</span>
+        <span class="color-swatch" aria-hidden="true" style=${`background: hsl(${hue} 100% ${100 - saturation / 2}%);`}></span>
+      </div>
+      ${!actual && !this.colorDraft ? b `<span class="status">${this.t("unknownColor")}</span>` : A}
+      <label>${this.t("hue")}
+        <input type="range" class="hue" data-control="hue" min="0" max="360" step="1"
+          .value=${l(String(hue))} aria-label=${this.t("hue")}
+          ?disabled=${!this.enabled(light.entity)}
+          @input=${(e) => this.setColor(e, 0, false)}
+          @change=${(e) => this.setColor(e, 0, true)} />
+      </label>
+      <label>${this.t("saturation")}
+        <input type="range" data-control="saturation" min="0" max="100" step="1"
+          .value=${l(String(saturation))} aria-label=${this.t("saturation")}
+          aria-valuetext=${formatPercent(this.hass, saturation)}
+          ?disabled=${!this.enabled(light.entity)}
+          @input=${(e) => this.setColor(e, 1, false)}
+          @change=${(e) => this.setColor(e, 1, true)} />
+      </label>
+    </div>`;
     }
     error() {
         return this.requests.error
@@ -1022,6 +1271,7 @@ class LightGroupCard extends i$1 {
         const entity = light ? this.hass?.states[light.entity] : undefined;
         const actual = entity?.state === "off" ? 0 : brightnessPercent(entity);
         const value = this.draft ?? actual;
+        const confirmationConfig = this.confirmationSection ? { ...this.config, sections: [this.confirmationSection] } : this.config;
         return b `<dialog
       aria-labelledby="dialog-title"
       @cancel=${(e) => {
@@ -1047,13 +1297,13 @@ class LightGroupCard extends i$1 {
         </button>
       </header>
       ${this.confirmingAllOff
-            ? b `<p>${this.t("allOffPrompt").replace("{title}", this.config.title || this.t("title"))}</p>
+            ? b `<p>${this.t("allOffPrompt").replace("{title}", this.confirmationSection?.name || this.config.title || this.t("title"))}</p>
               <div class="controls">
                 <button class="action" data-action="cancel-all-off" autofocus
                   @click=${() => this.close()}>${this.t("cancel")}</button>
                 <button class="action primary" data-action="confirm-all-off"
-                  ?disabled=${!this.hass || !allOffTargets(this.config, this.hass).length || this.config.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity)))}
-                  @click=${() => { this.close(); this.allOff(); }}>${this.t("allOff")}</button>
+                  ?disabled=${!this.hass || !allOffTargets(confirmationConfig, this.hass).length || confirmationConfig.sections.some((s) => s.lights.some((l) => this.requests.pending(l.entity)))}
+                  @click=${() => { const section = this.confirmationSection; this.close(); this.allOff(section); }}>${this.t("allOff")}</button>
               </div>`
             : light
                 ? b `
@@ -1078,6 +1328,7 @@ class LightGroupCard extends i$1 {
                         @change=${(e) => this.brightness(e, true)}
                     /></label>`
                     : A}
+              ${this.colorControls(light)}
               ${this.error()}
               <div class="controls">
                 <button
@@ -1140,6 +1391,7 @@ class LightGroupCard extends i$1 {
                     ${s.icon ? b `<ha-icon .icon=${s.icon}></ha-icon>` : A}
                     <h3>${s.name}</h3>
                   </div>
+                  ${s.show_controls ? this.roomControls(s) : A}
                   <div class="lights">
                     ${s.lights.map((l) => this.light(l))}
                   </div>
@@ -1265,6 +1517,15 @@ class LightGroupEditor extends i$1 {
     section(section, index) {
         return b `<fieldset data-section=${index}>
       <legend>${section.name || this.t("newRoom")}</legend>
+      <label>
+        ${this.t("roomControls")}
+        <input type="checkbox" name=${`section-controls-${index}`}
+          .checked=${l(section.show_controls ?? false)}
+          @change=${(e) => this.change((c) => {
+            c.sections[index].show_controls = e.target.checked;
+        })}
+        />
+      </label>
       <div class="fields">
         ${this.text(`section-name-${index}`, "sectionName", section.name, (value) => this.change((c) => {
             c.sections[index].name = value;

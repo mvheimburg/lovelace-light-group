@@ -294,6 +294,81 @@ export const styles = [
       background: color-mix(in srgb, var(--lg-accent) 24%, var(--lg-surface));
       color: var(--primary-text-color, #262d38);
     }
+    .room-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+      padding: 8px 12px;
+      border-radius: 22px;
+      background: var(--lg-pill);
+    }
+    .room-controls .round {
+      background: var(--lg-surface);
+    }
+    .room-controls output {
+      font-size: 12px;
+      color: var(--lg-muted);
+      overflow-wrap: anywhere;
+    }
+    .room-brightness {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 100px;
+      font-size: 12px;
+    }
+    .room-brightness input,
+    .color-controls input {
+      width: 100%;
+      min-height: 44px;
+      margin: 0;
+      accent-color: var(--lg-accent);
+    }
+    input[type="range"]:focus-visible {
+      outline: 3px solid var(--lg-accent);
+      outline-offset: 2px;
+      border-radius: 8px;
+    }
+    .color-controls {
+      display: grid;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .color-controls label {
+      display: grid;
+      gap: 4px;
+    }
+    .color-swatch {
+      width: 32px;
+      height: 24px;
+      border: 1px solid var(--divider-color, #888);
+      border-radius: 8px;
+    }
+    .hue {
+      appearance: none;
+      background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00) center / 100% 12px no-repeat;
+    }
+    .hue::-webkit-slider-thumb {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--lg-surface);
+      border-radius: 50%;
+      background: var(--lg-accent);
+      box-shadow: 0 0 0 1px var(--lg-muted);
+    }
+    .hue::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--lg-surface);
+      border-radius: 50%;
+      background: var(--lg-accent);
+    }
+    .color-controls input:disabled {
+      opacity: 0.5;
+    }
     .brightness {
       display: grid;
       gap: 16px;

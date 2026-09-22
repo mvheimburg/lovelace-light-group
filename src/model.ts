@@ -40,3 +40,16 @@ export function allOffTargets(
     ...new Set(config.sections.flatMap((s) => s.lights.map((l) => l.entity))),
   ].filter((id) => available(hass, id) && hass.states[id].state === "on");
 }
+
+export function supportsColor(entity?: HassEntity): boolean {
+  const modes = entity?.attributes.supported_color_modes;
+  return Array.isArray(modes) && modes.some((mode) =>
+    ["hs", "xy", "rgb", "rgbw", "rgbww"].includes(mode));
+}
+export function hsColor(entity?: HassEntity): [number, number] | undefined {
+  const value = entity?.attributes.hs_color;
+  if (!Array.isArray(value) || value.length !== 2 ||
+      !value.every((v) => typeof v === "number" && Number.isFinite(v)) ||
+      value[0] < 0 || value[0] > 360 || value[1] < 0 || value[1] > 100) return;
+  return [value[0], value[1]];
+}
