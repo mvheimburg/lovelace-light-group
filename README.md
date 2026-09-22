@@ -98,7 +98,7 @@ node scripts/screenshot.cjs  # build first; saves previews under docs/
 
 The preview imports the production bundle and uses **simulated** states and services. It does not contact Home Assistant. It includes language/theme switches, failure and pending examples, and mobile/appearance/color-scheme checks. Tests exercise rendered controls, service payloads, request ordering, invalid/missing data, localization and editor events. CI verifies the tracked distribution is current and runs HACS validation.
 
-Version `0.1.0`. Releases run after CI on pushes to `main`, using the package version and attaching `light-group-card.js`. Do not push to `main` until ready to publish.
+Version `0.1.1`. Releases run after CI on pushes to `main`, using the package version and attaching `light-group-card.js`. Do not push to `main` until ready to publish.
 
 ## Repository metadata
 

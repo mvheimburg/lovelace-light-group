@@ -1,6 +1,6 @@
 {
   "name": "lovelace-light-group",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Home Assistant dashboard card for grouped household lighting, with room sections, light controls and zone-wide all off.",
   "type": "module",
   "scripts": {

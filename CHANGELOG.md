@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-09-22
 
 - Add brightness sliders directly to dimmable light tiles.
 - Add visual editor settings to hide All off and optionally require confirmation.
