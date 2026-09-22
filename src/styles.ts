@@ -259,8 +259,8 @@ export const styles = [
       background: var(--lg-pill);
     }
     .primary {
-      background: var(--lg-accent);
-      color: var(--text-primary-color, #fff);
+      background: color-mix(in srgb, var(--lg-accent) 24%, var(--lg-surface));
+      color: var(--primary-text-color, #262d38);
     }
     .brightness {
       display: grid;

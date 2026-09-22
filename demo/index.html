@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="nb">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Light Group Card · simulated preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 32px;
+        background: #e7eaf0;
+        font:
+          14px system-ui,
+          sans-serif;
+        color: #454b62;
+        --primary-text-color: #454b62;
+        --secondary-text-color: #687187;
+        --card-background-color: #f7f8fb;
+        --secondary-background-color: #eef0f5;
+        --bubble-main-background-color: #f7f8fb;
+        --bubble-secondary-background-color: #eceff4;
+        --bubble-accent-color: #707b42;
+        --primary-color: #5c7351;
+        --divider-color: #dce0e8;
+      }
+      body.dark {
+        background: #161c22;
+        color: #e2e7ee;
+        --primary-text-color: #e2e7ee;
+        --secondary-text-color: #aab4c1;
+        --card-background-color: #232c35;
+        --ha-card-background: #232c35;
+        --secondary-background-color: #303c48;
+        --bubble-main-background-color: #232c35;
+        --bubble-secondary-background-color: #303c48;
+        --bubble-accent-color: #c5ce8e;
+        --divider-color: #41505d;
+        --primary-color: #99b394;
+      }
+      main {
+        max-width: 1500px;
+        margin: auto;
+      }
+      nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      nav button {
+        font: inherit;
+        border: 1px solid var(--divider-color);
+        color: inherit;
+        background: var(--card-background-color);
+        border-radius: 20px;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      .intro {
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--secondary-text-color);
+        margin-bottom: 20px;
+      }
+      #cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+        align-items: start;
+      }
+      #cards light-group-card:nth-child(3) {
+        max-width: 480px;
+      }
+      #scheme-gallery {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+      #scheme-gallery:empty {
+        display: none;
+      }
+      @media (max-width: 800px) {
+        body {
+          padding: 12px;
+        }
+        #cards,
+        #scheme-gallery {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav>
+        <button id="theme">Light / dark</button
+        ><button id="language">EN / NB</button
+        ><button id="offline">Connection</button
+        ><button id="failure">Fail next action</button
+        ><button id="pending">Delay next action</button
+        ><button id="appearance">Default / Bubble</button
+        ><button id="schemes">Color schemes</button>
+      </nav>
+      <p class="intro">Light Group Card · simulated Home Assistant</p>
+      <div id="cards"></div>
+      <div id="scheme-gallery"></div>
+    </main>
+    <script type="module" src="./preview.ts"></script>
+  </body>
+</html>

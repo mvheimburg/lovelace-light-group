@@ -1,0 +1,107 @@
+# Light Group Card
+
+A Home Assistant dashboard card for grouped household lighting, with room sections, light controls and zone-wide all off.
+
+Use one card per floor or zone to replace a collection of Bubble light buttons. It works with existing `light.*` entities (including Home Assistant light groups), without Bubble Card or a companion integration. Default and Bubble appearances follow your dashboard, with the same color schemes as the other household cards.
+
+![Two floors of lights in Bubble appearance, with simulated Home Assistant states](docs/light-group-card.png)
+
+## Install
+
+Add `https://github.com/mvheimburg/lovelace-light-group` to HACS as a **Dashboard** custom repository, then install **Light Group Card**. The resource is `/hacsfiles/lovelace-light-group/light-group-card.js`, type **JavaScript module**. Refresh the browser after installation or upgrade.
+
+For manual installation, copy `dist/light-group-card.js` to `/config/www/light-group-card.js` and register `/local/light-group-card.js` as a JavaScript module under dashboard resources.
+
+## Set up your rooms
+
+Edit the dashboard, add **Light Group Card**, and use its visual editor to:
+
+- Set a floor/zone title and icon.
+- Add room sections and select their lights with Home Assistant's entity selectors.
+- Reorder rooms and lights, or give them display names and icons.
+- Choose Default or Bubble appearance and a color scheme.
+
+Save the dashboard to keep changes. Cancel leaves the saved dashboard untouched. Configuration creates no backend entities or groups and changes no automations. The card's **Configure** cog explains where these options live, including when lights are unavailable. Incomplete new light rows remain editor drafts until a light is selected; select the light or remove that row before saving.
+
+Place floor cards beside each other with the dashboard's own layout. The light grid wraps within each card, down to a single column on narrow screens.
+
+The following IDs are **examples**; replace them with your actual light entities. The screenshot supplied for the design contains names, not entity IDs.
+
+```yaml
+type: custom:light-group-card
+title: 2. etasje
+icon: mdi:home-floor-2
+appearance: bubble
+color_scheme: home-assistant
+sections:
+  - name: Kjøkken
+    icon: mdi:countertop
+    lights:
+      - entity: light.example_kitchen_ceiling
+        name: Kjøkkentak
+        icon: mdi:ceiling-light
+      - entity: light.example_kitchen_island
+        name: Kjøkkenøy
+        icon: mdi:ceiling-light-outline
+  - name: Stue og gang
+    icon: mdi:sofa
+    lights:
+      - entity: light.example_living_room
+        name: TV-stue
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `title` | Lights / Lys | Floor or zone title. |
+| `icon` | `mdi:lightbulb-group-outline` | Header icon. |
+| `appearance` | `default` | `default` or `bubble`; Bubble Card need not be installed. |
+| `color_scheme` | `home-assistant` | Theme colors, or `bright`, `warm`, `mint`, `sky`, `lavender`. The five explicit palettes stay light on a dark dashboard. |
+| `sections` | `[]` | Ordered rooms, each with `name`, optional `icon`, and a `lights` array. |
+| `sections[].lights[].entity` | Required | A `light.*` entity. |
+| `sections[].lights[].name` | HA friendly name | Display override; does not rename anything in HA. |
+| `sections[].lights[].icon` | Entity icon or lightbulb | Display icon override. |
+
+## Everyday controls
+
+Tap a light's **round icon** to turn it on/off. Its name opens a panel in the card's own style, with a brightness slider for lights whose supported color modes allow dimming. Slider changes are sent on release or keyboard change. **More controls** opens Home Assistant's light dialog for color, temperature and device-specific features. Brightness is an adjustable setting, so it opens controls rather than recorder history; this card displays no sensor readings.
+
+**All off** affects only available, currently on lights listed in this card. Repeated entity IDs are sent once. An existing HA light-group entity retains its normal HA behavior, including controlling its members.
+
+Controls show **Updating…** until the service finishes and Home Assistant confirms the requested state. Overlapping requests are blocked; other lights remain usable. If a request fails or no confirmation arrives within 10 seconds, an error is shown. Brightness returns to the latest HA value on failure. No device state is invented locally. Unavailable/missing lights and disconnected HA data disable device actions; Configure stays accessible.
+
+## Language and accessibility
+
+Card and editor labels follow `hass.language`, then `hass.locale.language`. English and Norwegian Bokmål are supported, including `nb-NO`, underscore/case variants, and legacy `no`. `nn` uses the existing Bokmål fallback, not a separate Nynorsk translation. Unsupported languages use English. Labels update when HA's language changes, while custom names remain untouched.
+
+Percentages use the formatting locale separately from the label dictionary and honor HA number-format preferences. Service values stay numeric. Static card-picker metadata is English because it has no HA language context. Backend error details retain their original wording.
+
+Buttons have accessible names and visible keyboard focus. Dialogs trap focus, close with Escape, and restore focus to their trigger. State is shown with text as well as color. Both light and dark themes are supported.
+
+## Development
+
+```sh
+npm ci
+npx playwright install chromium
+npm test
+npm run lint
+npm run typecheck
+npm run build
+npm run dev                 # open /demo/
+node scripts/screenshot.cjs  # build first; saves previews under docs/
+```
+
+The preview imports the production bundle and uses **simulated** states and services. It does not contact Home Assistant. It includes language/theme switches, failure and pending examples, and mobile/appearance/color-scheme checks. Tests exercise rendered controls, service payloads, request ordering, invalid/missing data, localization and editor events. CI verifies the tracked distribution is current and runs HACS validation.
+
+Version `0.1.0`. Releases run after CI on pushes to `main`, using the package version and attaching `light-group-card.js`. Do not push to `main` until ready to publish.
+
+## Repository metadata
+
+If GitHub metadata has not been set, an authenticated owner can run:
+
+```sh
+gh repo edit mvheimburg/lovelace-light-group --description "A Home Assistant dashboard card for grouped household lighting, with room sections, light controls and zone-wide all off." --add-topic home-assistant --add-topic homeassistant --add-topic hacs --add-topic hacs-dashboard --add-topic lovelace --add-topic lovelace-card --add-topic lovelace-custom-card --add-topic lighting
+```
+
+## License
+
+GPL-3.0. Build, theme and color-scheme conventions adapted from [Thermostat Valve Card](https://github.com/mvheimburg/lovelace-thermostat-valve), also GPL-3.0. See [LICENSE](LICENSE).
