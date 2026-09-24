@@ -36,10 +36,11 @@ export interface HassEntity {
 }
 export interface LanguageContext {
   language?: string;
-  locale?: { language?: string; number_format?: string };
+  locale?: { language?: string; number_format?: string; time_format?: string };
 }
 export interface HomeAssistant extends LanguageContext {
-  connection?: { connected: boolean };
+  connection?: { connected: boolean; sendMessagePromise?<T>(message: Record<string, unknown>): Promise<T> };
+  callWS?<T>(message: Record<string, unknown>): Promise<T>;
   states: Record<string, HassEntity>;
   callService(
     domain: string,

@@ -104,7 +104,8 @@ it("omits unsupported brightness and emits more-info", async () => {
   card.addEventListener("hass-more-info", event);
   await click(card, '[data-entity="light.b"] [data-action="details"]');
   expect(card.shadowRoot!.querySelector('dialog input[type="range"]')).toBeNull();
-  await click(card, '[data-action="more"]');
+  await click(card, 'dialog:not(#history) [data-action="history"]');
+  await click(card, '#history [data-action="more"]');
   expect(event.mock.lastCall![0].detail).toEqual({ entityId: "light.b" });
 });
 it("handles zero and missing brightness safely", async () => {
@@ -498,4 +499,69 @@ it("clears unsubmitted color on disconnect and when selecting another light", as
   await click(card, '[data-action="close"]');
   await click(card, '[data-entity="light.b"] [data-action="details"]');
   expect(card.shadowRoot!.querySelector('[data-control="hue"]')).toBeNull();
+});
+
+it("opens shared recorder history from readings and moves more controls to an accessible header icon", async () => {
+  const card = await mount();
+  const callWS = vi.fn(async () => ({ "light.a": [{ s: "on", a: { brightness: 128 }, lu: Date.now() / 1000 - 3600 }] }));
+  card.hass = { ...card.hass!, callWS } as typeof card.hass;
+  await card.updateComplete;
+  await click(card, '[data-entity="light.a"] [data-action="history"]');
+  await vi.waitFor(() => expect(card.shadowRoot!.querySelector('#history .history-plot svg')).not.toBeNull());
+  expect(callWS).toHaveBeenCalledWith(expect.objectContaining({ type: "history/history_during_period", entity_ids: ["light.a"] }));
+  const plot = card.shadowRoot!.querySelector('.history-plot')!;
+  plot.dispatchEvent(new PointerEvent('pointermove', { clientX: plot.getBoundingClientRect().right - 10 }));
+  await card.updateComplete;
+  expect(card.shadowRoot!.querySelector('#history')!.textContent).toContain('50.2');
+  expect(card.shadowRoot!.querySelectorAll('#history [data-range]')).toHaveLength(3);
+  const more = button(card, '#history [data-action="more"]');
+  expect(more.closest('.history-top')).not.toBeNull();
+  expect(more.getAttribute('aria-label')).toBe('More controls');
+  expect(more.textContent!.trim()).toBe('');
+  const event = vi.fn();
+  card.addEventListener('hass-more-info', event);
+  more.click();
+  expect(event.mock.lastCall![0].detail).toEqual({ entityId: 'light.a' });
+});
+
+it("localizes history live, retries errors and disables more controls on disconnect", async () => {
+  const card = await mount();
+  const callWS = vi.fn().mockRejectedValueOnce(new Error('recorder denied')).mockResolvedValue({});
+  card.hass = { ...card.hass!, language: 'nb_NO', callWS };
+  await card.updateComplete;
+  await click(card, '[data-entity="light.b"] [data-action="history"]');
+  await vi.waitFor(() => expect(card.shadowRoot!.querySelector('#history')!.textContent).toContain('recorder denied'));
+  expect(button(card, '#history [data-action="more"]').title).toBe('Flere kontroller');
+  await click(card, '[data-retry]');
+  await vi.waitFor(() => expect(callWS).toHaveBeenCalledTimes(2));
+  card.hass = { ...card.hass!, language: 'en-GB', connection: { connected: false } };
+  await card.updateComplete;
+  expect(button(card, '#history [data-action="more"]').title).toBe('More controls');
+  expect(button(card, '#history [data-action="more"]').disabled).toBe(true);
+  expect(card.shadowRoot!.querySelector('#history')!.textContent).toContain('Unavailable');
+  expect(button(card, '[data-action="configure"]').disabled).toBe(false);
+});
+
+it("drops recorder responses when configuration changes", async () => {
+  const card = await mount();
+  let resolve!: (value: unknown) => void;
+  card.hass = { ...card.hass!, callWS: <T>() => new Promise<T>((done) => { resolve = (value) => done(value as T); }) };
+  await card.updateComplete;
+  await click(card, '[data-entity="light.b"] [data-action="history"]');
+  card.setConfig({ type: 'custom:light-group-card', sections: [] });
+  resolve({ 'light.b': [{ s: 'on', lu: Date.now() / 1000 - 100 }] });
+  await card.updateComplete;
+  await Promise.resolve();
+  expect(card.shadowRoot!.querySelector<HTMLDialogElement>('#history')!.open).toBe(false);
+  expect(card.shadowRoot!.querySelector('#history .history-item')).toBeNull();
+});
+
+it("returns focus to the light row after moving from controls to history", async () => {
+  const card = await mount();
+  const trigger = button(card, details);
+  trigger.focus();
+  await click(card, details);
+  await click(card, 'dialog:not(#history) [data-action="history"]');
+  await click(card, '[data-close-history]');
+  await vi.waitFor(() => expect(card.shadowRoot!.activeElement).toBe(trigger));
 });

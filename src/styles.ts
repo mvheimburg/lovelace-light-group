@@ -13,6 +13,10 @@ export const styles = [
       );
       --lg-pill: var(--secondary-background-color, #f1f3f6);
       --lg-accent: var(--bubble-accent-color, var(--primary-color, #507b9b));
+      --history-surface: var(--lg-surface);
+      --history-pill: var(--lg-pill);
+      --history-accent: var(--lg-accent);
+      --history-muted: var(--lg-muted);
       --lg-radius: var(--ha-card-border-radius, 16px);
       --lg-muted: var(--secondary-text-color, #626976);
     }
@@ -201,13 +205,14 @@ export const styles = [
     .inline-brightness input:disabled {
       cursor: default;
     }
-    .inline-brightness output {
+    .inline-brightness .reading {
       font-size: 11px;
       color: var(--lg-muted);
       font-variant-numeric: tabular-nums;
       overflow-wrap: anywhere;
       max-width: 45%;
     }
+    .reading { padding: 0 8px; text-align: left; border-radius: 12px; }
     .label {
       min-width: 0;
       flex: 1;

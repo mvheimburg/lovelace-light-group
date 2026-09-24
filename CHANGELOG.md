@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 — 2026-09-24
+
+- Add shared recorder history for each light’s on/off state and brightness, with 6 h, 24 h and 7 d ranges.
+- Make state and brightness readouts open history while preserving light controls and sliders.
+- Move More controls to an accessible icon beside Close in the history dialog.
+
 ## 0.1.2 — 2026-09-22
 
 - Add hue and saturation controls directly to color-light popups.

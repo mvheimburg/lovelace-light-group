@@ -72,6 +72,12 @@ const { mkdir } = require("node:fs/promises");
       () => document.documentElement.scrollWidth > innerWidth,
     );
     if (overflow) throw new Error("Mobile viewport overflows horizontally");
+    await page.locator("light-group-card").first().locator('[data-action="history"]').first().click();
+    await page.locator("light-group-card").first().locator('#history .history-chart').waitFor();
+    await page.screenshot({ path: "docs/light-group-history-mobile.png", fullPage: false });
+    const headerFits = await page.locator("light-group-card").first().locator('#history .history-top').evaluate((header) => header.scrollWidth <= header.clientWidth);
+    if (!headerFits) throw new Error("History header overflows on mobile");
+    await page.keyboard.press("Escape");
     await page.locator("#failure").click();
     await page
       .locator("light-group-card")
@@ -102,7 +108,7 @@ const { mkdir } = require("node:fs/promises");
     });
     if (errors.length) throw new Error(errors.join("\n"));
     console.log(
-      "Saved seven production-bundle previews; no browser errors or mobile overflow.",
+      "Saved eight production-bundle previews; no browser errors or mobile overflow.",
     );
   } finally {
     await browser?.close();

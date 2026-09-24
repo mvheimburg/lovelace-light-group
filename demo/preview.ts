@@ -5,6 +5,8 @@ import {
   mdiLightbulbGroupOffOutline,
   mdiCogOutline,
   mdiClose,
+  mdiHistory,
+  mdiTune,
   mdiHomeFloor1,
   mdiHomeFloor2,
   mdiCeilingLight,
@@ -40,6 +42,8 @@ const icons: Record<string, string> = {
   "lightbulb-group-off-outline": mdiLightbulbGroupOffOutline,
   "cog-outline": mdiCogOutline,
   close: mdiClose,
+  history: mdiHistory,
+  tune: mdiTune,
   "home-floor-1": mdiHomeFloor1,
   "home-floor-2": mdiHomeFloor2,
   "ceiling-light": mdiCeilingLight,
@@ -179,6 +183,17 @@ const hass: HomeAssistant = {
   locale: { language: "nb-NO" },
   connection: { connected: true },
   states,
+  async callWS<T>(message: Record<string, unknown>): Promise<T> {
+    const start = Date.parse(String(message.start_time));
+    const now = Date.now();
+    return Object.fromEntries((message.entity_ids as string[]).map((id) => [id,
+      Array.from({ length: 25 }, (_, index) => ({
+        lu: (start + (now - start) * index / 24) / 1000,
+        s: index === 13 ? "unavailable" : index % 8 < 3 ? "off" : "on",
+        a: { brightness: index % 8 < 3 ? 0 : 90 + index * 5 },
+      })),
+    ])) as T;
+  },
   async callService(_domain, service, data) {
     const fail = failure;
     const slow = delay;

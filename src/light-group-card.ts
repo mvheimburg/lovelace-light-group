@@ -1,4 +1,7 @@
 import { LitElement, html, nothing, type PropertyValues } from "lit";
+import { HistoryController, historyConnection, loadSeries, historyDialog, openHistoryDialog,
+  historyFormat, historyStrings, historyStyles, lineChart, lineChartTimeAt, valueAt, stateAt,
+  type Series, type Source } from "lovelace-card-history";
 import { live } from "lit/directives/live.js";
 import {
   normalizeConfig,
@@ -19,12 +22,50 @@ import { Requests, type Expected } from "./requests";
 import { styles } from "./styles";
 import type { CardConfig, HomeAssistant, LightConfig, SectionConfig } from "./types";
 export class LightGroupCard extends LitElement {
-  static styles = styles;
+  static styles = [styles, historyStyles];
   static properties = { hass: { attribute: false } };
   hass?: HomeAssistant;
   private config: CardConfig = { type: TYPE, sections: [] };
   private configError?: ConfigErrorCode;
   private selected?: LightConfig;
+  private historyLight?: LightConfig;
+  private history = new HistoryController<Series[]>(this, async (range, end) => {
+    const hass = this.hass;
+    const light = this.historyLight;
+    if (!hass || !light || hass.connection?.connected === false) throw new Error(this.t("unavailable"));
+    const sources: Source[] = [{ entityId: light.entity, kind: "lane", color: 0 }];
+    if (supportsBrightness(hass.states[light.entity])) sources.push({ entityId: light.entity, attribute: "brightness", unit: "%", color: 1 });
+    const series = await loadSeries(historyConnection({ callWS: hass.callWS?.bind(hass), connection: hass.connection?.sendMessagePromise ? { sendMessagePromise: hass.connection.sendMessagePromise.bind(hass.connection) } : undefined }), sources, hass.states, range, { now: end, statisticsFrom: 0 });
+    return series.map((item) => item.attribute === "brightness" ? { ...item, points: item.points.map(([time, value]) => [time, stateAt(series[0], time) === "off" ? 0 : value === undefined ? undefined : value * 100 / 255] as [number, number | undefined]) } : item);
+  });
+  private showHistory(light: LightConfig, event: Event): void {
+    const trigger = this.selected ? this.trigger : event.currentTarget as HTMLElement;
+    this.close();
+    this.historyLight = light;
+    void openHistoryDialog(this.history, this.renderRoot, this, historyStrings(this.hass).failed, trigger);
+  }
+  private historyView() {
+    const strings = historyStrings(this.hass);
+    const format = historyFormat(this.hass);
+    const light = this.historyLight;
+    return historyDialog(this.history, {
+      strings, format, subtitle: light ? this.name(light) : undefined,
+      headerActions: html`<button class="history-action" data-action="more" title=${this.t("more")} aria-label=${this.t("more")}
+        ?disabled=${!light || !this.hass || !available(this.hass, light.entity)} @click=${() => this.more(light?.entity)}><ha-icon .icon=${"mdi:tune"}></ha-icon></button>`,
+      chart: (data, [start, end], hover, width) => lineChart(data, start, end, hover, { ...format, label: strings.history }, { width, domains: { "%": [0, 100] } }),
+      isEmpty: (data) => !data.some((item) => item.points.some(([, value]) => value !== undefined)),
+      timeAt: (event, svg, [start, end]) => lineChartTimeAt(event, svg, start, end, false),
+      legend: (data, time) => data.map((item) => {
+        const value = time === undefined
+          ? item.kind === "lane" ? (this.hass && available(this.hass, item.entityId) ? Number(this.hass.states[item.entityId].state === "on") : undefined)
+            : (this.hass && available(this.hass, item.entityId) ? this.hass.states[item.entityId].state === "off" ? 0 : brightnessPercent(this.hass.states[item.entityId]) : undefined)
+          : valueAt(item, time);
+        return { entityId: item.entityId, name: item.attribute ? this.t("brightness") : light ? this.name(light) : item.entityId,
+          color: item.color, kind: item.kind, value: value === undefined ? strings.unavailable : item.kind === "lane" ? (value ? strings.on : strings.off) : formatPercent(this.hass, value) };
+      }),
+      select: (id) => this.more(id),
+    });
+  }
   private configuring = false;
   private confirmingAllOff = false;
   private confirmationSection?: SectionConfig;
@@ -58,6 +99,8 @@ export class LightGroupCard extends LitElement {
   });
   setConfig(input: unknown): void {
     this.close();
+    this.history.reset();
+    this.historyLight = undefined;
     this.configError = undefined;
     try {
       this.config = normalizeConfig(input);
@@ -119,7 +162,7 @@ export class LightGroupCard extends LitElement {
     else this.setAttribute("data-color-scheme", this.config.color_scheme);
   }
   protected updated(): void {
-    const dialog = this.renderRoot.querySelector<HTMLDialogElement>("dialog");
+    const dialog = this.renderRoot.querySelector<HTMLDialogElement>("dialog:not(#history)");
     if ((this.selected || this.configuring || this.confirmingAllOff) && dialog && !dialog.open)
       dialog.showModal();
   }
@@ -196,7 +239,9 @@ export class LightGroupCard extends LitElement {
     this.requestUpdate();
   }
   private close(): void {
-    this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+    this.renderRoot?.querySelector<HTMLDialogElement>("dialog:not(#history)")?.close();
+    this.renderRoot?.querySelector<HTMLDialogElement>("#history")?.close();
+    this.history.cancel();
     this.selected = undefined;
     this.configuring = false;
     this.confirmingAllOff = false;
@@ -208,8 +253,7 @@ export class LightGroupCard extends LitElement {
     this.trigger = undefined;
     this.requestUpdate();
   }
-  private more(): void {
-    const id = this.selected?.entity;
+  private more(id = this.selected?.entity): void {
     if (!id || !this.hass || !available(this.hass, id)) return;
     this.close();
     this.dispatchEvent(
@@ -385,8 +429,10 @@ export class LightGroupCard extends LitElement {
         title=${this.name(light)}
       >
         <span class="name">${this.name(light)}</span
-        ><span class="status">${this.status(id)}</span>
-      </button>
+        ></button>
+      <button class="reading status" data-action="history" title=${historyStrings(this.hass).showHistory}
+        aria-label=${`${historyStrings(this.hass).showHistory}: ${this.name(light)}`}
+        @click=${(event: Event) => this.showHistory(light, event)}>${this.status(id)}</button>
       ${supportsBrightness(entity) ? html`
         <div class="inline-brightness">
           <input type="range" min="0" max="100" step="1"
@@ -397,7 +443,9 @@ export class LightGroupCard extends LitElement {
             @input=${(e: Event) => this.brightness(e, false, id)}
             @change=${(e: Event) => this.brightness(e, true, id)}
           />
-          <output>${brightness === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, brightness)}</output>
+          <button class="reading" data-action="brightness-history" title=${historyStrings(this.hass).showHistory}
+            aria-label=${`${historyStrings(this.hass).showHistory}: ${this.t("brightness")}, ${this.name(light)}`}
+            @click=${(event: Event) => this.showHistory(light, event)}>${brightness === undefined ? this.t("unknownBrightness") : formatPercent(this.hass, brightness)}</button>
         </div>` : nothing}
       </div>
     </div>`;
@@ -422,6 +470,8 @@ export class LightGroupCard extends LitElement {
           </h2>
           ${light ? html`<span class="status" aria-live="polite">${this.status(light.entity)}</span>` : nothing}
         </div>
+        ${light ? html`<button class="round" data-action="history" title=${historyStrings(this.hass).showHistory} aria-label=${historyStrings(this.hass).showHistory}
+          @click=${(event: Event) => this.showHistory(light, event)}><ha-icon .icon=${"mdi:history"}></ha-icon></button>` : nothing}
         <button
           class="round"
           data-action="close"
@@ -471,13 +521,6 @@ export class LightGroupCard extends LitElement {
               ${this.error()}
               <div class="controls">
                 <button
-                  class="action"
-                  data-action="more"
-                  ?disabled=${!this.hass || !available(this.hass, light.entity)}
-                  @click=${() => this.more()}
-                >
-                  ${this.t("more")}</button
-                ><button
                   class="action primary"
                   data-action="dialog-toggle"
                   ?disabled=${!this.enabled(light.entity)}
@@ -544,6 +587,7 @@ export class LightGroupCard extends LitElement {
             )
       }
       ${this.dialog()}
+      ${this.historyView()}
     </ha-card>`;
   }
 }
